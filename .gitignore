@@ -1,0 +1,59 @@
+# Binaries
+# Compiled executable files - no need to store in git,
+# as they can always be rebuilt from source code
+run-tbot
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+# Temporary test binaries
+*.test
+
+# Output of the go coverage tool
+# Test coverage files - generated automatically
+*.out
+coverage.html
+
+# Environment files
+# CRITICAL: .env files contain secrets (BOT_TOKEN and others)
+# Never commit these files! Use .env.example for template
+.env
+.env.local
+.env.*.local
+
+# IDEs and editors
+# IDE settings - each developer may have their own
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS specific files
+# Operating system files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Go workspace file
+# Go 1.18+ workspace file - not always needed in repository
+go.work
+go.work.sum
+
+# Dependency directories
+# vendor directory (if used) - optionally can be committed
+# but usually go.mod and go.sum are sufficient
+vendor/
+
+# Temporary files
+# Temporary files
+*.tmp
+*.log
+tmp/
+temp/
