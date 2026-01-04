@@ -1,0 +1,153 @@
+# Continuous Integration Workflow
+# Runs on every push to main/develop branches and on pull requests
+# Validates code quality: tests, linting, formatting
+
+name: CI
+
+# Trigger conditions
+on:
+  push:
+    branches:
+      - main      # Run on commits to main branch
+      - develop   # Run on commits to develop branch (if you use it)
+  pull_request:
+    branches:
+      - main      # Run on PRs targeting main
+
+# Cancel in-progress workflows when new commits pushed
+# Saves CI minutes and provides faster feedback
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Job 1: Test and validate Go code
+  test:
+    name: Test and Lint
+    runs-on: ubuntu-latest  # Free GitHub-hosted runner
+
+    steps:
+      # Step 1: Checkout code from repository
+      # actions/checkout@v4 is official GitHub action
+      # Fetches code so we can build/test it
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Step 2: Setup Go environment
+      # actions/setup-go@v5 installs specified Go version
+      # cache: true enables automatic caching of go modules
+      # Caching speeds up subsequent runs (downloads deps once, reuses)
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'  # Match version from go.mod
+          cache: true         # Enable dependency caching
+
+      # Step 3: Download dependencies
+      # go mod download fetches all modules from go.mod
+      # With caching enabled, this is usually very fast (hits cache)
+      - name: Download dependencies
+        run: go mod download
+
+      # Step 4: Verify dependencies
+      # go mod verify checks go.sum checksums match downloaded modules
+      # Security measure: ensures dependencies haven't been tampered with
+      - name: Verify dependencies
+        run: go mod verify
+
+      # Step 5: Run tests
+      # -v: verbose output (shows which tests ran)
+      # -race: enable race detector (finds concurrent access bugs)
+      # -coverprofile: generate coverage report
+      # ./...: run tests in all packages recursively
+      - name: Run tests
+        run: go test -v -race -coverprofile=coverage.out ./...
+
+      # Step 6: Display test coverage
+      # go tool cover shows coverage percentage
+      # Helps track if we're maintaining good test coverage
+      - name: Check coverage
+        run: go tool cover -func=coverage.out
+
+      # Step 7: Run go vet (static analysis)
+      # go vet examines code for suspicious constructs
+      # Catches common mistakes: unreachable code, wrong printf formats, etc.
+      # ./... checks all packages
+      - name: Run go vet
+        run: go vet ./...
+
+      # Step 8: Check code formatting
+      # gofmt -l lists files that need formatting
+      # -s: simplify code where possible
+      # If any files listed, formatting is wrong → fail the build
+      # This enforces consistent code style across the project
+      - name: Check formatting
+        run: |
+          # List files with incorrect formatting
+          unformatted=$(gofmt -l -s .)
+          if [ -n "$unformatted" ]; then
+            echo "The following files are not formatted correctly:"
+            echo "$unformatted"
+            echo ""
+            echo "Please run: gofmt -w -s ."
+            exit 1
+          fi
+
+      # Step 9: Run golangci-lint (comprehensive linter)
+      # golangci-lint runs multiple linters in parallel
+      # Catches: unused variables, inefficient code, potential bugs
+      # Using official GitHub Action for golangci-lint
+      # version: latest uses newest linter version
+      # args: additional flags
+      #   --timeout=5m: allow 5 minutes for linting (large projects)
+      #   --verbose: show detailed output
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v4
+        with:
+          version: latest
+          args: --timeout=5m --verbose
+
+  # Job 2: Build verification
+  # Separate job ensures code actually compiles
+  # Runs in parallel with test job for faster CI
+  build:
+    name: Build Verification
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache: true
+
+      - name: Download dependencies
+        run: go mod download
+
+      # Build the binary
+      # If this fails, code doesn't compile
+      # -o /dev/null: don't save binary (we just want to verify it builds)
+      # ./...: build all packages
+      - name: Build application
+        run: go build -v -o /dev/null ./...
+
+      # Build with production flags
+      # Same flags as Dockerfile: static binary, stripped debug info
+      # Verifies that production build works
+      - name: Build production binary
+        run: |
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+            -ldflags="-w -s" \
+            -a \
+            -installsuffix cgo \
+            -o bot \
+            .
+
+      # Show binary size (for tracking optimization)
+      - name: Show binary size
+        run: |
+          ls -lh bot
+          echo "Binary size: $(du -h bot | cut -f1)"
