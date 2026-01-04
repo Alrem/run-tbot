@@ -1,0 +1,61 @@
+# .dockerignore - files to exclude from Docker build context
+# Similar to .gitignore, but for Docker builds
+# Reduces build context size = faster builds & smaller images
+
+# Git directory (not needed in container)
+.git
+.gitignore
+
+# GitHub Actions (not needed in container)
+.github
+
+# Documentation (not needed at runtime)
+*.md
+docs/
+
+# Environment files (CRITICAL: never include secrets in image!)
+.env
+.env.*
+!.env.example
+
+# Go build artifacts (we build inside container)
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+run-tbot
+bot
+
+# Test files (not needed in production image)
+*_test.go
+*.test
+*.out
+coverage.html
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS-specific files
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+ehthumbs.db
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.log
+
+# GCP Service Account keys (NEVER include in image!)
+*.json
+key.json
+
+# Claude workspace
+.claude/
