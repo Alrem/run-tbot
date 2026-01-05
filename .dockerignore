@@ -25,7 +25,6 @@ docs/
 *.so
 *.dylib
 run-tbot
-bot
 
 # Test files (not needed in production image)
 *_test.go
