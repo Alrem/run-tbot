@@ -40,7 +40,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25'  # Match version from go.mod
+          go-version: '1.24'  # Stable version compatible with golangci-lint
           cache: true         # Enable dependency caching
 
       # Step 3: Download dependencies
@@ -121,7 +121,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version: '1.24'
           cache: true
 
       - name: Download dependencies

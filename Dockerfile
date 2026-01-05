@@ -7,8 +7,8 @@
 # ==============================================================================
 # Use official Go image based on Alpine Linux
 # Alpine is chosen for small size (~300 MB with Go vs ~800 MB with Debian)
-# golang:1.25-alpine includes Go compiler and build tools
-FROM golang:1.25-alpine AS builder
+# golang:1.24-alpine includes Go compiler and build tools
+FROM golang:1.24-alpine AS builder
 
 # Install git (needed for go mod download with private repos, though we don't have any)
 # ca-certificates needed for downloading dependencies over HTTPS
