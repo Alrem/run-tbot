@@ -122,8 +122,10 @@ jobs:
       #   --timeout: 60s max request duration (sufficient for webhook)
       - name: Deploy to Cloud Run
         run: |
-          # Get the SHA tag from metadata
-          IMAGE_TAG="sha-${{ github.sha }}"
+          # Get the short SHA tag (7 characters) to match metadata-action output
+          # metadata-action uses short SHA by default (type=sha creates sha-SHORTSHA)
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          IMAGE_TAG="sha-${SHORT_SHA}"
 
           # Image was pushed to GitHub Container Registry (ghcr.io)
           GHCR_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${IMAGE_TAG}"
