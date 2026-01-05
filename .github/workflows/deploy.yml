@@ -112,6 +112,7 @@ jobs:
       #   --platform managed: Use fully managed Cloud Run (not GKE)
       #   --region: Where to deploy (us-central1 recommended for free tier)
       #   --allow-unauthenticated: Allow public access (Telegram needs to reach webhook)
+      #   --service-account: Service account the Cloud Run service runs as
       #   --set-env-vars: Environment variables injected into container
       #   --port: Container listens on this port (matches main.go server port)
       #   --min-instances: Scale to zero when idle (FREE TIER optimization)
@@ -127,11 +128,15 @@ jobs:
 
           echo "Deploying image: $IMAGE_URL"
 
+          # Extract project ID from service account key
+          PROJECT_ID=$(echo '${{ secrets.GCP_SA_KEY }}' | jq -r '.project_id')
+
           gcloud run deploy ${{ env.SERVICE_NAME }} \
             --image $IMAGE_URL \
             --platform managed \
             --region ${{ env.REGION }} \
             --allow-unauthenticated \
+            --service-account github-actions-deployer@${PROJECT_ID}.iam.gserviceaccount.com \
             --set-env-vars BOT_TOKEN=${{ secrets.BOT_TOKEN }},ENVIRONMENT=production,ALLOWED_USERS=${{ secrets.ALLOWED_USERS }} \
             --port 8080 \
             --min-instances 0 \
