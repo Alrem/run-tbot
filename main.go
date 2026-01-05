@@ -10,8 +10,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/alrem/run-tbot/bot"
-	"github.com/alrem/run-tbot/config"
+	"github.com/Alrem/run-tbot/bot"
+	"github.com/Alrem/run-tbot/config"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )

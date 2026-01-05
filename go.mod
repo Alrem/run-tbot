@@ -1,4 +1,4 @@
-module github.com/alrem/run-tbot
+module github.com/Alrem/run-tbot
 
 go 1.24
 
