@@ -133,8 +133,9 @@ jobs:
 
           # Pull image through Artifact Registry Remote Repository
           # Remote repo proxies ghcr.io and caches images in GCP
-          # Format: REGION-docker.pkg.dev/PROJECT/REPO/ghcr.io/ORIGINAL_PATH:TAG
-          AR_IMAGE="us-central1-docker.pkg.dev/${PROJECT_ID}/github-remote/ghcr.io/${{ env.IMAGE_NAME }}:${IMAGE_TAG}"
+          # Format: REGION-docker.pkg.dev/PROJECT/REPO/UPSTREAM_PATH:TAG
+          # Note: Don't include ghcr.io in path - remote repo already knows the upstream registry
+          AR_IMAGE="us-central1-docker.pkg.dev/${PROJECT_ID}/github-remote/${{ env.IMAGE_NAME }}:${IMAGE_TAG}"
 
           echo "Pushed to: $GHCR_IMAGE"
           echo "Deploying from: $AR_IMAGE"
