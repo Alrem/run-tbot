@@ -143,7 +143,8 @@ func healthCheckHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Return 200 OK with simple message
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("OK"))
+	// Explicitly ignore write error - nothing useful to do if health check write fails
+	_, _ = w.Write([]byte("OK"))
 }
 
 // webhookHandler creates a handler for POST /webhook requests from Telegram
