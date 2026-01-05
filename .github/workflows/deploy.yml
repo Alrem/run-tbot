@@ -124,15 +124,23 @@ jobs:
         run: |
           # Get the SHA tag from metadata
           IMAGE_TAG="sha-${{ github.sha }}"
-          IMAGE_URL="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${IMAGE_TAG}"
 
-          echo "Deploying image: $IMAGE_URL"
+          # Image was pushed to GitHub Container Registry (ghcr.io)
+          GHCR_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${IMAGE_TAG}"
 
           # Extract project ID from service account key
           PROJECT_ID=$(echo '${{ secrets.GCP_SA_KEY }}' | jq -r '.project_id')
 
+          # Pull image through Artifact Registry Remote Repository
+          # Remote repo proxies ghcr.io and caches images in GCP
+          # Format: REGION-docker.pkg.dev/PROJECT/REPO/ghcr.io/ORIGINAL_PATH:TAG
+          AR_IMAGE="us-central1-docker.pkg.dev/${PROJECT_ID}/github-remote/ghcr.io/${{ env.IMAGE_NAME }}:${IMAGE_TAG}"
+
+          echo "Pushed to: $GHCR_IMAGE"
+          echo "Deploying from: $AR_IMAGE"
+
           gcloud run deploy ${{ env.SERVICE_NAME }} \
-            --image $IMAGE_URL \
+            --image $AR_IMAGE \
             --platform managed \
             --region ${{ env.REGION }} \
             --allow-unauthenticated \
