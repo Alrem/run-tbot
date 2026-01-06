@@ -30,22 +30,40 @@ func NewBot(token string, debug bool) (*tgbotapi.BotAPI, error) {
 	return bot, nil
 }
 
-// GetDiceKeyboard returns an inline keyboard with "Roll Dice" button
-// Inline keyboard - buttons that are displayed directly in the message
-// Unlike custom keyboard (at the bottom of screen), inline buttons disappear after use
+// GetMainKeyboard returns a reply keyboard with all bot features
+// Reply keyboard - persistent buttons displayed at the bottom of the screen
+// Unlike inline keyboard (buttons in messages), reply keyboard stays visible
+// and sends regular messages when buttons are clicked
 //
-// Returns InlineKeyboardMarkup - structure with keyboard markup
-func GetDiceKeyboard() tgbotapi.InlineKeyboardMarkup {
-	// tgbotapi.NewInlineKeyboardMarkup accepts any number of button rows
-	// Each row is created via NewInlineKeyboardRow
-	return tgbotapi.NewInlineKeyboardMarkup(
-		// NewInlineKeyboardRow creates one row with buttons
-		// You can pass multiple buttons - they will be in one row
-		tgbotapi.NewInlineKeyboardRow(
-			// NewInlineKeyboardButtonData creates a button with callback data
-			// Parameter 1: text on button (user sees)
-			// Parameter 2: callback_data (sent to bot when clicked)
-			tgbotapi.NewInlineKeyboardButtonData("🎲 Roll Dice", "roll_dice"),
+// Features:
+//   - 🎲 Dice - Roll single die (1-6)
+//   - 🎲🎲 Double Dice - Roll two dice (2-12)
+//   - 🌀 Twister - Random Twister game move
+//   - 🖥️ OVH Servers - Check OVH server availability (private)
+//
+// Returns ReplyKeyboardMarkup with 2x2 button layout
+func GetMainKeyboard() tgbotapi.ReplyKeyboardMarkup {
+	// Create keyboard with 2 rows of 2 buttons each
+	keyboard := tgbotapi.NewReplyKeyboard(
+		// Row 1: Dice features
+		tgbotapi.NewKeyboardButtonRow(
+			tgbotapi.NewKeyboardButton("🎲 Dice"),
+			tgbotapi.NewKeyboardButton("🎲🎲 Double Dice"),
+		),
+		// Row 2: Other features
+		tgbotapi.NewKeyboardButtonRow(
+			tgbotapi.NewKeyboardButton("🌀 Twister"),
+			tgbotapi.NewKeyboardButton("🖥️ OVH Servers"),
 		),
 	)
+
+	// ResizeKeyboard optimizes button size for user's screen
+	// Without this, keyboard may be too large on mobile devices
+	keyboard.ResizeKeyboard = true
+
+	// OneTimeKeyboard=false keeps keyboard visible after button click
+	// If true, keyboard would hide after each use (not desired for bot features)
+	keyboard.OneTimeKeyboard = false
+
+	return keyboard
 }

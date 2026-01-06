@@ -17,8 +17,8 @@ import (
 //
 // Our implementation:
 //  1. Sends welcome message explaining what the bot does
-//  2. Attaches inline keyboard with "Roll Dice" button
-//  3. User can immediately try the dice feature
+//  2. Attaches reply keyboard with all bot features (persistent buttons at bottom)
+//  3. User can immediately try any feature via keyboard buttons
 //
 // Parameters:
 //   - botAPI: Telegram Bot API instance for sending messages
@@ -42,11 +42,12 @@ func HandleStart(botAPI *tgbotapi.BotAPI, message *tgbotapi.Message) {
 	// Parameters: chatID (where to send), text (message content)
 	msg := tgbotapi.NewMessage(message.Chat.ID, welcomeText)
 
-	// Step 3: Attach inline keyboard with "Roll Dice" button
-	// bot.GetDiceKeyboard() returns InlineKeyboardMarkup
-	// When user clicks button, we'll receive CallbackQuery with data="roll_dice"
-	// This CallbackQuery will be handled by HandleDiceCallback
-	msg.ReplyMarkup = bot.GetDiceKeyboard()
+	// Step 3: Attach reply keyboard with all bot features
+	// bot.GetMainKeyboard() returns ReplyKeyboardMarkup with 4 buttons:
+	//   - 🎲 Dice, 🎲🎲 Double Dice, 🌀 Twister, 🖥️ OVH Servers
+	// When user clicks button, we'll receive regular Message with button text
+	// These messages will be routed by router.go to appropriate handlers
+	msg.ReplyMarkup = bot.GetMainKeyboard()
 
 	// Step 4: Send the message
 	// bot.Send() returns (Message, error)
@@ -77,7 +78,8 @@ func HandleStart(botAPI *tgbotapi.BotAPI, message *tgbotapi.Message) {
 // The message should:
 //   - Be friendly and welcoming
 //   - Explain what the bot does
-//   - Encourage user to try the feature
+//   - List available features
+//   - Encourage user to try the features
 //
 // Parameters:
 //   - firstName: User's first name from Telegram profile
@@ -96,9 +98,13 @@ func formatStartMessage(firstName string) string {
 	// Use multiline string for better readability
 	// The message explains:
 	//   1. What the bot does (educational project)
-	//   2. Current feature (dice roll)
-	//   3. Call to action (click the button)
+	//   2. Available features (4 buttons)
+	//   3. Call to action (use the keyboard)
 	return "👋 Hello, " + name + "!\n\n" +
 		"Welcome to Run-Tbot - an educational Telegram bot built with Go.\n\n" +
-		"🎲 Try rolling the dice using the button below!"
+		"Try these features using the keyboard below:\n" +
+		"🎲 Dice - Roll a single die (1-6)\n" +
+		"🎲🎲 Double Dice - Roll two dice (2-12)\n" +
+		"🌀 Twister - Get a random Twister move\n" +
+		"🖥️ OVH Servers - Check server availability"
 }
