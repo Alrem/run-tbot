@@ -194,7 +194,10 @@ func routeButtonMessage(bot *tgbotapi.BotAPI, message *tgbotapi.Message, cfg *co
 			"user_id", message.From.ID)
 		msg := tgbotapi.NewMessage(message.Chat.ID,
 			"🎲🎲 Double Dice feature coming soon!")
-		bot.Send(msg)
+		if _, err := bot.Send(msg); err != nil {
+			slog.Error("Failed to send Double Dice placeholder message",
+				"error", err, "chat_id", message.Chat.ID)
+		}
 
 	case "🌀 Twister":
 		// Twister game move
@@ -203,7 +206,10 @@ func routeButtonMessage(bot *tgbotapi.BotAPI, message *tgbotapi.Message, cfg *co
 			"user_id", message.From.ID)
 		msg := tgbotapi.NewMessage(message.Chat.ID,
 			"🌀 Twister feature coming soon!")
-		bot.Send(msg)
+		if _, err := bot.Send(msg); err != nil {
+			slog.Error("Failed to send Twister placeholder message",
+				"error", err, "chat_id", message.Chat.ID)
+		}
 
 	case "🖥️ OVH Servers":
 		// OVH server availability check (private)
@@ -212,7 +218,10 @@ func routeButtonMessage(bot *tgbotapi.BotAPI, message *tgbotapi.Message, cfg *co
 			"user_id", message.From.ID)
 		msg := tgbotapi.NewMessage(message.Chat.ID,
 			"🖥️ OVH Servers feature coming soon!")
-		bot.Send(msg)
+		if _, err := bot.Send(msg); err != nil {
+			slog.Error("Failed to send OVH placeholder message",
+				"error", err, "chat_id", message.Chat.ID)
+		}
 
 	default:
 		// Unknown button or regular text message
