@@ -35,33 +35,33 @@ func TestFormatHelpMessage(t *testing.T) {
 				"/start",             // Start command
 				"/help",              // Help command
 				"Button Features",    // Button section
-				"🎲 Dice",            // Dice feature
-				"🎲🎲 Double Dice",   // Double Dice feature
-				"🌀 Twister",         // Twister feature
+				"🎲 Dice",             // Dice feature
+				"🎲🎲 Double Dice",     // Double Dice feature
+				"🌀 Twister",          // Twister feature
 				"educational bot",    // Footer
 			},
 			expectedNotContains: []string{
 				"Private Features", // Should not see private section
-				"🔐",              // Lock emoji (private section marker)
-				"OVH Servers",     // Private feature
+				"🔐",                // Lock emoji (private section marker)
+				"OVH Servers",      // Private feature
 			},
 		},
 		{
 			name:         "authorized user - public + private commands",
 			isAuthorized: true,
 			expectedContains: []string{
-				"Available Commands",  // Header
-				"Public Commands",     // Public section
-				"/start",              // Start command
-				"/help",               // Help command
-				"Button Features",     // Button section
+				"Available Commands", // Header
+				"Public Commands",    // Public section
+				"/start",             // Start command
+				"/help",              // Help command
+				"Button Features",    // Button section
 				"🎲 Dice",             // Dice feature
-				"🎲🎲 Double Dice",    // Double Dice feature
+				"🎲🎲 Double Dice",     // Double Dice feature
 				"🌀 Twister",          // Twister feature
-				"Private Features",    // Private section (KEY DIFFERENCE)
+				"Private Features",   // Private section (KEY DIFFERENCE)
 				"🔐",                  // Lock emoji
-				"🖥️ OVH Servers",      // Private feature
-				"educational bot",     // Footer
+				"🖥️ OVH Servers",     // Private feature
+				"educational bot",    // Footer
 			},
 			expectedNotContains: []string{
 				// Nothing should be hidden from authorized users
