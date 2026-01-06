@@ -53,7 +53,7 @@ func TestFormatOVHResults(t *testing.T) {
 				"Available OVH Servers",
 				"Top 5 cheapest in London",
 				"1\\.",
-				"15.99",
+				"15\\.99", // Price period is escaped in MarkdownV2
 				"GBP",
 				"ECO 1",
 				"1801sk12\\.lon\\.1", // FQN is escaped in MarkdownV2
@@ -96,9 +96,9 @@ func TestFormatOVHResults(t *testing.T) {
 				"1\\.",
 				"2\\.",
 				"3\\.",
-				"15.99",
-				"25.99",
-				"35.99",
+				"15\\.99", // Price period is escaped in MarkdownV2
+				"25\\.99", // Price period is escaped in MarkdownV2
+				"35\\.99", // Price period is escaped in MarkdownV2
 				"ECO 1",
 				"ECO 2",
 				"ECO 3",

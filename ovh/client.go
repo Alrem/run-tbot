@@ -205,8 +205,10 @@ func FormatOfferForTelegram(offer Offer, index int) string {
 
 	// Line 1: Number, Price, Name
 	builder.WriteString(fmt.Sprintf("%d\\. ", index))
-	builder.WriteString(fmt.Sprintf("*%.2f %s/mo* \\- ",
-		offer.Price,
+	// Format price first, then escape it for MarkdownV2 (periods must be escaped)
+	priceStr := fmt.Sprintf("%.2f", offer.Price)
+	builder.WriteString(fmt.Sprintf("*%s %s/mo* \\- ",
+		escapeMarkdownV2(priceStr),
 		escapeMarkdownV2(offer.Currency)))
 	builder.WriteString(escapeMarkdownV2(offer.InvoiceName))
 	builder.WriteString("\n")

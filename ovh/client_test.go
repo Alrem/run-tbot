@@ -32,7 +32,7 @@ func TestFormatOfferForTelegram(t *testing.T) {
 			index: 1,
 			expectedContains: []string{
 				"1\\.",                   // Numbered list
-				"15.99",                  // Price
+				"15\\.99",                // Escaped price (period must be escaped in MarkdownV2)
 				"GBP/mo",                 // Currency with /mo
 				"Eco Server 1801SK\\-12", // Escaped invoice name
 				"FQN:",                   // FQN label
@@ -51,7 +51,7 @@ func TestFormatOfferForTelegram(t *testing.T) {
 			index: 5,
 			expectedContains: []string{
 				"5\\.",                      // Index 5
-				"99.50",                     // Price
+				"99\\.50",                   // Escaped price (period must be escaped in MarkdownV2)
 				"EUR/mo",                    // EUR currency
 				"Test Server \\(2023\\)",    // Escaped parentheses
 				"server\\.test\\-2023\\.v1", // Escaped FQN
