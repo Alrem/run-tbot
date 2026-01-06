@@ -52,12 +52,12 @@ COPY . .
 #   - Reduces binary size by ~30% with no runtime impact
 # -a: Force rebuild of all packages (ensures clean build)
 # -installsuffix cgo: Use different install suffix for cgo vs non-cgo builds
-# -o /app/bot: Output binary to /app/bot
+# -o /app/run-tbot: Output binary to /app/run-tbot (not /app/bot to avoid conflict with bot/ directory)
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
     -ldflags="-w -s" \
     -a \
     -installsuffix cgo \
-    -o /app/bot \
+    -o /app/run-tbot \
     .
 
 # ==============================================================================
@@ -88,8 +88,8 @@ WORKDIR /home/appuser
 # --from=builder: Copy from the builder stage, not the current stage
 # --chown=appuser:appuser: Set ownership to appuser (not root)
 # This ensures the binary is owned by non-root user
-# Explicit destination path to avoid ambiguity
-COPY --from=builder --chown=appuser:appuser /app/bot /home/appuser/bot
+# Using explicit paths: source /app/run-tbot → destination /home/appuser/run-tbot
+COPY --from=builder --chown=appuser:appuser /app/run-tbot /home/appuser/run-tbot
 
 # Switch to non-root user
 # All subsequent commands and the container itself will run as this user
@@ -113,5 +113,5 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
 # No need for shell (we're running a single binary)
 # Using JSON array format (exec form) is more efficient than shell form
 # This starts the bot directly without wrapping in a shell
-# Using absolute path to be explicit
-CMD ["/home/appuser/bot"]
+# Using absolute path to the binary
+CMD ["/home/appuser/run-tbot"]
