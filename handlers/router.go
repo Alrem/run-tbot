@@ -179,15 +179,7 @@ func routeButtonMessage(bot *tgbotapi.BotAPI, message *tgbotapi.Message, cfg *co
 
 	case "🎲🎲 Double Dice":
 		// Double dice roll (2-12)
-		// Handler will be added in next commit
-		slog.Info("Double Dice button clicked (handler not yet implemented)",
-			"user_id", message.From.ID)
-		msg := tgbotapi.NewMessage(message.Chat.ID,
-			"🎲🎲 Double Dice feature coming soon!")
-		if _, err := bot.Send(msg); err != nil {
-			slog.Error("Failed to send Double Dice placeholder message",
-				"error", err, "chat_id", message.Chat.ID)
-		}
+		HandleDoubleDice(bot, message)
 
 	case "🌀 Twister":
 		// Twister game move
