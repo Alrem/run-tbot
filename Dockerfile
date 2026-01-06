@@ -88,7 +88,8 @@ WORKDIR /home/appuser
 # --from=builder: Copy from the builder stage, not the current stage
 # --chown=appuser:appuser: Set ownership to appuser (not root)
 # This ensures the binary is owned by non-root user
-COPY --from=builder --chown=appuser:appuser /app/bot .
+# Explicit destination path to avoid ambiguity
+COPY --from=builder --chown=appuser:appuser /app/bot /home/appuser/bot
 
 # Switch to non-root user
 # All subsequent commands and the container itself will run as this user
@@ -112,4 +113,5 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
 # No need for shell (we're running a single binary)
 # Using JSON array format (exec form) is more efficient than shell form
 # This starts the bot directly without wrapping in a shell
-CMD ["./bot"]
+# Using absolute path to be explicit
+CMD ["/home/appuser/bot"]
