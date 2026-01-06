@@ -38,15 +38,10 @@ func RouteUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update, cfg *config.Confi
 	// Log incoming update for debugging
 	// update.UpdateID is unique identifier for each update
 	// Helps track update flow through the system
-	var messageText string
-	if update.Message != nil {
-		messageText = update.Message.Text
-	}
-	slog.Info("Routing update in router",
+	slog.Debug("Routing update",
 		"update_id", update.UpdateID,
 		"has_message", update.Message != nil,
-		"has_edited_message", update.EditedMessage != nil,
-		"message_text", messageText)
+		"has_edited_message", update.EditedMessage != nil)
 
 	// Route 1: Handle regular messages (commands, button clicks, text)
 	// update.Message is non-nil when user sends a message
@@ -98,11 +93,6 @@ func RouteUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update, cfg *config.Confi
 //   - message: Message from Telegram
 //   - cfg: Application configuration
 func routeMessage(bot *tgbotapi.BotAPI, message *tgbotapi.Message, cfg *config.Config) {
-	slog.Info("routeMessage called",
-		"text", message.Text,
-		"is_command", message.IsCommand(),
-		"user_id", message.From.ID)
-
 	// Route 1: Handle commands (messages starting with /)
 	if message.IsCommand() {
 		// Extract command text
