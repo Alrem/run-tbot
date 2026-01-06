@@ -176,10 +176,15 @@ func webhookHandler(botAPI *tgbotapi.BotAPI, cfg *config.Config) http.HandlerFun
 
 		// Log the update (helpful for debugging)
 		// update.UpdateID is unique identifier for each update
+		var messageText string
+		if update.Message != nil {
+			messageText = update.Message.Text
+		}
 		slog.Info("Received update",
 			"update_id", update.UpdateID,
 			"has_message", update.Message != nil,
-			"has_callback", update.CallbackQuery != nil)
+			"has_callback", update.CallbackQuery != nil,
+			"message_text", messageText)
 
 		// Process update with router
 		// Router analyzes update type (Message, CallbackQuery, etc.)
