@@ -13,7 +13,7 @@ import (
 // Telegram Update structure can contain different types of updates:
 //   - Message: regular message from user
 //   - EditedMessage: user edited their previous message
-//   - CallbackQuery: user clicked inline keyboard button
+//   - CallbackQuery: user clicked inline keyboard button (not used - we use ReplyKeyboard)
 //   - InlineQuery: user typed @botname in any chat
 //   - ChosenInlineResult: user selected inline query result
 //   - ... and many more (see Telegram Bot API docs)
@@ -21,9 +21,8 @@ import (
 // Our routing strategy:
 //  1. Check which field in Update is non-nil
 //  2. Route based on update type
-//  3. For messages: route by command
-//  4. For callbacks: route by callback_data
-//  5. Log and ignore unknown/unhandled updates
+//  3. For messages: route by command or button text
+//  4. Log and ignore unknown/unhandled updates
 //
 // Why this approach?
 //   - Simple and explicit (easy to understand)
@@ -42,24 +41,20 @@ func RouteUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update, cfg *config.Confi
 	slog.Debug("Routing update",
 		"update_id", update.UpdateID,
 		"has_message", update.Message != nil,
-		"has_callback", update.CallbackQuery != nil,
 		"has_edited_message", update.EditedMessage != nil)
 
-	// Route 1: Handle regular messages (commands, text, etc.)
+	// Route 1: Handle regular messages (commands, button clicks, text)
 	// update.Message is non-nil when user sends a message
+	// This includes:
+	//   - Commands (/start, /help)
+	//   - ReplyKeyboard button clicks (sends Message with button text)
+	//   - Regular text messages
 	if update.Message != nil {
 		routeMessage(bot, update.Message, cfg)
 		return
 	}
 
-	// Route 2: Handle callback queries (inline button clicks)
-	// update.CallbackQuery is non-nil when user clicks inline keyboard button
-	if update.CallbackQuery != nil {
-		routeCallback(bot, update.CallbackQuery)
-		return
-	}
-
-	// Route 3: Handle edited messages (optional)
+	// Route 2: Handle edited messages (optional)
 	// update.EditedMessage is non-nil when user edits their message
 	// For most bots, edited messages can be ignored or treated same as new messages
 	// We log and ignore them for now
@@ -72,120 +67,150 @@ func RouteUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update, cfg *config.Confi
 	}
 
 	// Unknown/unhandled update type
-	// This could be: InlineQuery, ChosenInlineResult, Poll, etc.
+	// This could be: InlineQuery, ChosenInlineResult, Poll, CallbackQuery, etc.
+	// Note: We don't handle CallbackQuery anymore since we use ReplyKeyboard
 	// Log for debugging but don't crash
 	slog.Warn("Received unhandled update type",
 		"update_id", update.UpdateID)
 }
 
-// routeMessage routes Message updates to appropriate command handlers.
+// routeMessage routes Message updates to appropriate handlers.
 //
 // Message routing logic:
-//   - Check if message contains a command (starts with /)
-//   - Extract command text
-//   - Route to appropriate handler based on command
-//   - Log unknown commands
+//   - Check if message is a command (starts with /)
+//   - If command: route to command handler
+//   - If not command: check if it's a button click (ReplyKeyboard)
+//   - If button: route to button handler
+//   - Otherwise: log and ignore
 //
-// Command extraction:
-//   - message.Command() returns command without / and bot username
-//   - Example: "/start@mybot" -> "start"
-//   - Example: "/help" -> "help"
+// ReplyKeyboard vs InlineKeyboard:
+//   - ReplyKeyboard: sends regular Message with button text
+//   - InlineKeyboard: sends CallbackQuery with callback_data
+//   - We use ReplyKeyboard, so button clicks arrive as Messages
 //
 // Parameters:
 //   - bot: Telegram Bot API instance
 //   - message: Message from Telegram
 //   - cfg: Application configuration
 func routeMessage(bot *tgbotapi.BotAPI, message *tgbotapi.Message, cfg *config.Config) {
-	// Check if message is a command
-	// message.IsCommand() returns true if message starts with /
-	// This handles both commands and text messages
-	if !message.IsCommand() {
-		// Not a command - log and ignore
-		// In future, could handle regular text messages here
-		slog.Debug("Ignoring non-command message",
+	// Route 1: Handle commands (messages starting with /)
+	if message.IsCommand() {
+		// Extract command text
+		// message.Command() returns command without / prefix
+		// Also removes bot username if present (/start@botname -> start)
+		command := message.Command()
+
+		// Log command for monitoring
+		slog.Info("Routing command",
+			"command", command,
 			"user_id", message.From.ID,
-			"chat_id", message.Chat.ID,
-			"text", message.Text)
+			"username", message.From.UserName,
+			"chat_id", message.Chat.ID)
+
+		// Route to appropriate handler based on command
+		switch command {
+		case "start":
+			// /start command - welcome message + keyboard
+			HandleStart(bot, message)
+
+		case "help":
+			// /help command - show available commands (with authorization)
+			HandleHelp(bot, message, cfg)
+
+		default:
+			// Unknown command - send friendly error message
+			sendUnknownCommandMessage(bot, message)
+		}
 		return
 	}
 
-	// Extract command text
-	// message.Command() returns command without / prefix
-	// Also removes bot username if present (/start@botname -> start)
-	command := message.Command()
+	// Route 2: Handle button clicks from ReplyKeyboard
+	// ReplyKeyboard buttons send regular messages with button text
+	// We check if message text matches any of our button labels
+	routeButtonMessage(bot, message, cfg)
+}
 
-	// Log command for monitoring
-	slog.Info("Routing command",
-		"command", command,
+// routeButtonMessage routes ReplyKeyboard button clicks to appropriate handlers.
+//
+// ReplyKeyboard button routing logic:
+//   - Extract button text from message
+//   - Match against known button labels
+//   - Route to appropriate handler based on button text
+//   - Log and ignore unknown button text
+//
+// Button text format:
+//   - When creating button: NewKeyboardButton("🎲 Dice")
+//   - When user clicks: message.Text contains "🎲 Dice"
+//   - We match exact text (including emojis)
+//
+// Why exact text matching?
+//   - Simple and explicit
+//   - No need for callback_data encoding
+//   - Easy to debug (see button text in logs)
+//   - Emojis make buttons visually distinctive
+//
+// Trade-off:
+//   - Must keep button text in sync between bot.GetMainKeyboard() and this router
+//   - Changing button text requires updating both places
+//   - But: this is explicit and easy to maintain
+//
+// Parameters:
+//   - bot: Telegram Bot API instance
+//   - message: Message from Telegram containing button click
+//   - cfg: Application configuration (needed for authorization in OVH handler)
+func routeButtonMessage(bot *tgbotapi.BotAPI, message *tgbotapi.Message, cfg *config.Config) {
+	// Extract and trim button text
+	// strings.TrimSpace removes any accidental whitespace
+	buttonText := message.Text
+
+	// Log button click for monitoring
+	slog.Info("Routing button click",
+		"button_text", buttonText,
 		"user_id", message.From.ID,
 		"username", message.From.UserName,
 		"chat_id", message.Chat.ID)
 
-	// Route to appropriate handler based on command
-	switch command {
-	case "start":
-		// /start command - welcome message + dice button
-		HandleStart(bot, message)
+	// Route to appropriate handler based on button text
+	// IMPORTANT: These strings must match button text in bot.GetMainKeyboard()
+	switch buttonText {
+	case "🎲 Dice":
+		// Single dice roll (1-6)
+		HandleDice(bot, message)
 
-	case "help":
-		// /help command - show available commands (with authorization)
-		HandleHelp(bot, message, cfg)
+	case "🎲🎲 Double Dice":
+		// Double dice roll (2-12)
+		// Handler will be added in next commit
+		slog.Info("Double Dice button clicked (handler not yet implemented)",
+			"user_id", message.From.ID)
+		msg := tgbotapi.NewMessage(message.Chat.ID,
+			"🎲🎲 Double Dice feature coming soon!")
+		bot.Send(msg)
 
-	default:
-		// Unknown command - send friendly error message
-		// This helps users understand the bot's capabilities
-		sendUnknownCommandMessage(bot, message)
-	}
-}
+	case "🌀 Twister":
+		// Twister game move
+		// Handler will be added in next commit
+		slog.Info("Twister button clicked (handler not yet implemented)",
+			"user_id", message.From.ID)
+		msg := tgbotapi.NewMessage(message.Chat.ID,
+			"🌀 Twister feature coming soon!")
+		bot.Send(msg)
 
-// routeCallback routes CallbackQuery updates to appropriate handlers.
-//
-// CallbackQuery routing logic:
-//   - Extract callback_data from button click
-//   - Route to appropriate handler based on callback_data
-//   - Log unknown callbacks
-//
-// Callback data format:
-//   - When creating button: NewInlineKeyboardButtonData("text", "callback_data")
-//   - When user clicks: callback.Data contains "callback_data"
-//   - Can be any string, we use simple identifiers: "roll_dice", "settings_menu", etc.
-//
-// Parameters:
-//   - bot: Telegram Bot API instance
-//   - callback: CallbackQuery from Telegram
-func routeCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery) {
-	// callback.Data contains the callback_data from button
-	// This is the string we set when creating the button
-	data := callback.Data
-
-	// Log callback for monitoring
-	slog.Info("Routing callback",
-		"callback_data", data,
-		"user_id", callback.From.ID,
-		"username", callback.From.UserName,
-		"message_id", callback.Message.MessageID)
-
-	// Route to appropriate handler based on callback_data
-	switch data {
-	case "roll_dice":
-		// "Roll Dice" button click
-		HandleDiceCallback(bot, callback)
+	case "🖥️ OVH Servers":
+		// OVH server availability check (private)
+		// Handler will be added in next commit
+		slog.Info("OVH Servers button clicked (handler not yet implemented)",
+			"user_id", message.From.ID)
+		msg := tgbotapi.NewMessage(message.Chat.ID,
+			"🖥️ OVH Servers feature coming soon!")
+		bot.Send(msg)
 
 	default:
-		// Unknown callback - answer to remove loading spinner
-		// Even if we don't handle it, we must answer to remove spinner
-		slog.Warn("Unknown callback data",
-			"callback_data", data,
-			"user_id", callback.From.ID)
-
-		// Answer callback query to remove loading spinner
-		// Empty text = no notification shown to user
-		callbackConfig := tgbotapi.NewCallback(callback.ID, "")
-		if _, err := bot.Request(callbackConfig); err != nil {
-			slog.Error("Failed to answer unknown callback",
-				"error", err,
-				"callback_data", data)
-		}
+		// Unknown button or regular text message
+		// Log but don't send error (could be user typing normally)
+		slog.Debug("Ignoring unknown button text or regular message",
+			"text", buttonText,
+			"user_id", message.From.ID,
+			"chat_id", message.Chat.ID)
 	}
 }
 

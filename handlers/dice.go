@@ -8,63 +8,42 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-// HandleDiceCallback handles the "roll_dice" callback query from inline keyboard button.
-// When user clicks "Roll Dice" button, Telegram sends a CallbackQuery update.
+// HandleDice handles the "🎲 Dice" button click from reply keyboard.
+// When user clicks "🎲 Dice" button, Telegram sends a regular Message update
+// with message text matching the button text.
 //
-// CallbackQuery structure:
-//   - ID: unique identifier for this query (required for AnswerCallbackQuery)
-//   - From: user who clicked the button
-//   - Message: original message with the button
-//   - Data: callback_data from the button (in our case: "roll_dice")
-//
-// Important: ALWAYS call AnswerCallbackQuery, even if you don't show an alert.
-// If you don't answer, Telegram will show a loading spinner for 30 seconds.
+// ReplyKeyboard behavior:
+//   - Sends regular Message (not CallbackQuery like InlineKeyboard)
+//   - Message.Text contains button text ("🎲 Dice")
+//   - No callback_data field (that's only for InlineKeyboard)
+//   - No need to call AnswerCallbackQuery (only needed for InlineKeyboard)
 //
 // Flow:
 //  1. Generate random number 1-6
-//  2. Answer callback query (removes loading spinner)
-//  3. Send new message with dice result
+//  2. Send message with dice result
 //
 // Parameters:
 //   - bot: Telegram Bot API instance for sending messages
-//   - callback: CallbackQuery from Telegram containing button click data
-func HandleDiceCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery) {
+//   - message: Message from Telegram containing button click
+func HandleDice(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
 	// Step 1: Generate random dice number (1-6)
 	result := rollDice()
 
 	// Log the dice roll for debugging/monitoring
 	// In production, this helps track bot usage and debug issues
 	slog.Info("Dice rolled",
-		"user_id", callback.From.ID,
-		"username", callback.From.UserName,
+		"user_id", message.From.ID,
+		"username", message.From.UserName,
 		"result", result)
 
-	// Step 2: Answer the callback query
-	// This is MANDATORY - tells Telegram to remove the loading spinner
-	// If you don't call this, user sees loading spinner for 30 seconds
-	//
-	// NewCallback creates a CallbackConfig with:
-	//   - CallbackQueryID: unique ID from callback.ID
-	//   - Text: optional text to show in alert (empty = no alert, just remove spinner)
-	//   - ShowAlert: false = small notification, true = popup alert
-	callbackConfig := tgbotapi.NewCallback(callback.ID, "")
-	if _, err := bot.Request(callbackConfig); err != nil {
-		// If this fails, user will see loading spinner (bad UX)
-		// Log error but continue - we still want to send the result message
-		slog.Error("Failed to answer callback query",
-			"error", err,
-			"callback_id", callback.ID)
-	}
-
-	// Step 3: Send dice result message
+	// Step 2: Send dice result message
 	// Create message text with dice emoji and result
 	// Unicode dice emoji: 🎲 (U+1F3B2)
 	messageText := fmt.Sprintf("🎲 You rolled: %d", result)
 
 	// NewMessage creates a MessageConfig
 	// Parameters: chatID (where to send), text (message content)
-	// callback.Message.Chat.ID = chat where button was clicked
-	msg := tgbotapi.NewMessage(callback.Message.Chat.ID, messageText)
+	msg := tgbotapi.NewMessage(message.Chat.ID, messageText)
 
 	// Send the message
 	// bot.Send() returns Message and error
@@ -78,13 +57,13 @@ func HandleDiceCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery) 
 		//   - Telegram API is down
 		slog.Error("Failed to send dice result",
 			"error", err,
-			"chat_id", callback.Message.Chat.ID,
+			"chat_id", message.Chat.ID,
 			"result", result)
 		return
 	}
 
 	slog.Info("Dice result sent successfully",
-		"chat_id", callback.Message.Chat.ID,
+		"chat_id", message.Chat.ID,
 		"result", result)
 }
 
