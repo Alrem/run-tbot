@@ -12,6 +12,7 @@ import (
 
 	"github.com/Alrem/run-tbot/bot"
 	"github.com/Alrem/run-tbot/config"
+	"github.com/Alrem/run-tbot/handlers"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
@@ -180,12 +181,17 @@ func webhookHandler(botAPI *tgbotapi.BotAPI, cfg *config.Config) http.HandlerFun
 			"has_message", update.Message != nil,
 			"has_callback", update.CallbackQuery != nil)
 
-		// TODO: Process update with router (will be implemented in Phase 3)
-		// For now, we just log it
-		// handlers.RouteUpdate(botAPI, update, cfg)
+		// Process update with router
+		// Router analyzes update type (Message, CallbackQuery, etc.)
+		// and delegates to appropriate handler functions
+		// Router implementation: handlers/router.go
+		// Handler implementations: handlers/dice.go, handlers/start.go, handlers/help.go
+		handlers.RouteUpdate(botAPI, update, cfg)
 
 		// ALWAYS return 200 OK to Telegram
 		// Even if processing failed, we don't want Telegram to retry
+		// This prevents duplicate message delivery
+		// Errors are logged by handlers, not returned to Telegram
 		w.WriteHeader(http.StatusOK)
 	}
 }
