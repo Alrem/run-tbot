@@ -32,10 +32,10 @@ type Datacenter struct {
 // Catalog represents the OVH catalog response
 // Contains all plans, addons, and pricing information
 type Catalog struct {
-	CatalogID int      `json:"catalogId"`
-	Locale    Locale   `json:"locale"`
-	Plans     []Plan   `json:"plans"`   // Server plans
-	Addons    []Plan   `json:"addons"`  // Add-on services (bandwidth, etc.)
+	CatalogID int       `json:"catalogId"`
+	Locale    Locale    `json:"locale"`
+	Plans     []Plan    `json:"plans"`  // Server plans
+	Addons    []Plan    `json:"addons"` // Add-on services (bandwidth, etc.)
 	Products  []Product `json:"products"`
 }
 
@@ -107,7 +107,8 @@ type Offer struct {
 //   - error: Any errors during API calls or processing
 //
 // Example:
-//   offers, err := GetTopOffers("GB", "lon", 5)
+//
+//	offers, err := GetTopOffers("GB", "lon", 5)
 func GetTopOffers(subsidiary, datacenter string, top int) ([]Offer, error) {
 	// Step 1: Load server availability data
 	availabilities, err := loadAvailabilities()

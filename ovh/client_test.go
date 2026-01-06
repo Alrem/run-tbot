@@ -31,12 +31,12 @@ func TestFormatOfferForTelegram(t *testing.T) {
 			},
 			index: 1,
 			expectedContains: []string{
-				"1\\.",                      // Numbered list
-				"15.99",                     // Price
-				"GBP/mo",                    // Currency with /mo
-				"Eco Server 1801SK\\-12",    // Escaped invoice name
-				"FQN:",                      // FQN label
-				"1801sk12\\.ram\\.1",        // Escaped FQN
+				"1\\.",                   // Numbered list
+				"15.99",                  // Price
+				"GBP/mo",                 // Currency with /mo
+				"Eco Server 1801SK\\-12", // Escaped invoice name
+				"FQN:",                   // FQN label
+				"1801sk12\\.ram\\.1",     // Escaped FQN
 			},
 		},
 		{
@@ -50,11 +50,11 @@ func TestFormatOfferForTelegram(t *testing.T) {
 			},
 			index: 5,
 			expectedContains: []string{
-				"5\\.",                             // Index 5
-				"99.50",                            // Price
-				"EUR/mo",                           // EUR currency
-				"Test Server \\(2023\\)",          // Escaped parentheses
-				"server\\.test\\-2023\\.v1",       // Escaped FQN
+				"5\\.",                      // Index 5
+				"99.50",                     // Price
+				"EUR/mo",                    // EUR currency
+				"Test Server \\(2023\\)",    // Escaped parentheses
+				"server\\.test\\-2023\\.v1", // Escaped FQN
 			},
 		},
 		{
