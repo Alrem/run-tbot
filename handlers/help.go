@@ -91,14 +91,16 @@ func formatHelpMessage(isAuthorized bool) string {
 	message := "*📖 Available Commands*\n\n" +
 		"*Public Commands:*\n" +
 		"/start \\- Start the bot and see welcome message\n" +
-		"/help \\- Show this help message\n" +
-		"🎲 Roll Dice \\- Click the button to roll a dice \\(1\\-6\\)\n"
+		"/help \\- Show this help message\n\n" +
+		"*Button Features:*\n" +
+		"🎲 Dice \\- Roll a single die \\(1\\-6\\)\n" +
+		"🎲🎲 Double Dice \\- Roll two dice \\(2\\-12\\)\n" +
+		"🌀 Twister \\- Get a random Twister game move\n"
 
 	// Add private commands section only for authorized users
 	if isAuthorized {
-		message += "\n*🔐 Private Commands:*\n" +
-			"_No private commands implemented yet\\._\n" +
-			"_Future features will appear here\\._\n"
+		message += "\n*🔐 Private Features:*\n" +
+			"🖥️ OVH Servers \\- Check OVH server availability in London\n"
 	}
 
 	// Add footer with project info

@@ -34,12 +34,16 @@ func TestFormatHelpMessage(t *testing.T) {
 				"Public Commands",    // Public section
 				"/start",             // Start command
 				"/help",              // Help command
-				"Roll Dice",          // Dice feature
+				"Button Features",    // Button section
+				"🎲 Dice",            // Dice feature
+				"🎲🎲 Double Dice",   // Double Dice feature
+				"🌀 Twister",         // Twister feature
 				"educational bot",    // Footer
 			},
 			expectedNotContains: []string{
-				"Private Commands", // Should not see private section
-				"🔐",                // Lock emoji (private section marker)
+				"Private Features", // Should not see private section
+				"🔐",              // Lock emoji (private section marker)
+				"OVH Servers",     // Private feature
 			},
 		},
 		{
@@ -50,10 +54,13 @@ func TestFormatHelpMessage(t *testing.T) {
 				"Public Commands",     // Public section
 				"/start",              // Start command
 				"/help",               // Help command
-				"Roll Dice",           // Dice feature
-				"Private Commands",    // Private section (KEY DIFFERENCE)
-				"🔐",                   // Lock emoji
-				"No private commands", // Placeholder text
+				"Button Features",     // Button section
+				"🎲 Dice",             // Dice feature
+				"🎲🎲 Double Dice",    // Double Dice feature
+				"🌀 Twister",          // Twister feature
+				"Private Features",    // Private section (KEY DIFFERENCE)
+				"🔐",                  // Lock emoji
+				"🖥️ OVH Servers",      // Private feature
 				"educational bot",     // Footer
 			},
 			expectedNotContains: []string{
