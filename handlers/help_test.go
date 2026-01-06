@@ -21,40 +21,40 @@ import (
 func TestFormatHelpMessage(t *testing.T) {
 	// Define test cases
 	tests := []struct {
-		name                  string
-		isAuthorized          bool
-		expectedContains      []string // Strings that must be present
-		expectedNotContains   []string // Strings that must NOT be present
+		name                string
+		isAuthorized        bool
+		expectedContains    []string // Strings that must be present
+		expectedNotContains []string // Strings that must NOT be present
 	}{
 		{
 			name:         "unauthorized user - public commands only",
 			isAuthorized: false,
 			expectedContains: []string{
-				"Available Commands",    // Header
-				"Public Commands",       // Public section
-				"/start",                // Start command
-				"/help",                 // Help command
-				"Roll Dice",             // Dice feature
-				"educational bot",       // Footer
+				"Available Commands", // Header
+				"Public Commands",    // Public section
+				"/start",             // Start command
+				"/help",              // Help command
+				"Roll Dice",          // Dice feature
+				"educational bot",    // Footer
 			},
 			expectedNotContains: []string{
-				"Private Commands",      // Should not see private section
-				"🔐",                    // Lock emoji (private section marker)
+				"Private Commands", // Should not see private section
+				"🔐",                // Lock emoji (private section marker)
 			},
 		},
 		{
 			name:         "authorized user - public + private commands",
 			isAuthorized: true,
 			expectedContains: []string{
-				"Available Commands",    // Header
-				"Public Commands",       // Public section
-				"/start",                // Start command
-				"/help",                 // Help command
-				"Roll Dice",             // Dice feature
-				"Private Commands",      // Private section (KEY DIFFERENCE)
-				"🔐",                    // Lock emoji
-				"No private commands",   // Placeholder text
-				"educational bot",       // Footer
+				"Available Commands",  // Header
+				"Public Commands",     // Public section
+				"/start",              // Start command
+				"/help",               // Help command
+				"Roll Dice",           // Dice feature
+				"Private Commands",    // Private section (KEY DIFFERENCE)
+				"🔐",                   // Lock emoji
+				"No private commands", // Placeholder text
+				"educational bot",     // Footer
 			},
 			expectedNotContains: []string{
 				// Nothing should be hidden from authorized users

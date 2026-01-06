@@ -39,27 +39,27 @@ func TestFormatStartMessage(t *testing.T) {
 			name:  "normal user with first name",
 			input: "John",
 			expectedContains: []string{
-				"Hello, John",         // Personalized greeting
-				"Run-Tbot",            // Bot name
-				"educational",         // Project description
-				"🎲 Try rolling",      // Call to action
+				"Hello, John",   // Personalized greeting
+				"Run-Tbot",      // Bot name
+				"educational",   // Project description
+				"🎲 Try rolling", // Call to action
 			},
 		},
 		{
 			name:  "user without first name (empty string)",
 			input: "",
 			expectedContains: []string{
-				"Hello, there",        // Fallback greeting
-				"Run-Tbot",            // Bot name
-				"educational",         // Project description
-				"🎲 Try rolling",      // Call to action
+				"Hello, there",  // Fallback greeting
+				"Run-Tbot",      // Bot name
+				"educational",   // Project description
+				"🎲 Try rolling", // Call to action
 			},
 		},
 		{
 			name:  "user with unicode characters in name",
 			input: "Алексей", // Russian name
 			expectedContains: []string{
-				"Hello, Алексей",      // Unicode should work fine
+				"Hello, Алексей", // Unicode should work fine
 				"Run-Tbot",
 				"🎲 Try rolling",
 			},
