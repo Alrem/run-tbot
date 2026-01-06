@@ -187,15 +187,7 @@ func routeButtonMessage(bot *tgbotapi.BotAPI, message *tgbotapi.Message, cfg *co
 
 	case "🖥️ OVH Servers":
 		// OVH server availability check (private)
-		// Handler will be added in next commit
-		slog.Info("OVH Servers button clicked (handler not yet implemented)",
-			"user_id", message.From.ID)
-		msg := tgbotapi.NewMessage(message.Chat.ID,
-			"🖥️ OVH Servers feature coming soon!")
-		if _, err := bot.Send(msg); err != nil {
-			slog.Error("Failed to send OVH placeholder message",
-				"error", err, "chat_id", message.Chat.ID)
-		}
+		HandleOVHCheck(bot, message, cfg)
 
 	default:
 		// Unknown button or regular text message
