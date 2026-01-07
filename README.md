@@ -8,9 +8,16 @@ An educational Telegram bot project for learning Go programming and Google Cloud
 
 ## Features
 
-- 🎲 **Dice Roll**: Interactive dice roller (1-6)
+### Interactive Features (ReplyKeyboard)
+- 🎲 **Dice Roll**: Roll a single die (1-6)
+- 🎲🎲 **Double Dice**: Roll two dice with sum (2-12)
+- 🌀 **Twister**: Random Twister game move generator (hand/foot + color)
+- 🖥️ **OVH Servers**: Check available OVH servers in London with EUR pricing (private feature)
+
+### Technical Features
 - 🔐 **Authorization**: User-based access control for private functions
 - 📝 **Commands**: `/start`, `/help` with contextual help
+- ⌨️ **ReplyKeyboard**: Persistent button interface at bottom of screen
 - 🚀 **Cloud Native**: Deployed on GCP Cloud Run with auto-scaling
 - 🔄 **CI/CD**: Automated deployment via GitHub Actions
 - 📊 **Structured Logging**: JSON logs with slog for Cloud Run
@@ -139,8 +146,14 @@ run-tbot/
 ├── config/
 │   └── config.go           # Environment configuration management
 ├── handlers/
-│   ├── dice.go             # Dice roll callback handler
+│   ├── dice.go             # Dice roll handler
 │   ├── dice_test.go        # Unit tests for dice handler
+│   ├── doubledice.go       # Double dice roll handler
+│   ├── doubledice_test.go  # Unit tests for double dice handler
+│   ├── twister.go          # Twister game move generator handler
+│   ├── twister_test.go     # Unit tests for twister handler
+│   ├── ovhcheck.go         # OVH server availability handler (private)
+│   ├── ovhcheck_test.go    # Unit tests for OVH handler
 │   ├── start.go            # /start command handler
 │   ├── start_test.go       # Unit tests for start handler
 │   ├── help.go             # /help command handler (with auth)
@@ -149,6 +162,9 @@ run-tbot/
 │   └── integration_test.go # Integration tests
 ├── logger/
 │   └── logger.go           # Structured logging (slog wrapper)
+├── ovh/
+│   ├── client.go           # OVH API client wrapper
+│   └── client_test.go      # Unit tests for OVH client
 ├── .github/
 │   └── workflows/
 │       ├── ci.yml          # Continuous Integration
@@ -222,14 +238,36 @@ Developer → Git Push → GitHub Actions → Build Docker → Artifact Registry
 
 ### Bot Commands
 
-- `/start` - Display welcome message with dice roll button
-- `/help` - Show available commands (context-aware based on authorization)
+- `/start` - Display welcome message with ReplyKeyboard showing all available buttons
+- `/help` - Show available commands and features (context-aware based on authorization)
 
-### Dice Roll Feature
+### Interactive Button Features
 
-1. Send `/start` to the bot
-2. Click the "🎲 Roll Dice" button
-3. Receive a random number from 1 to 6
+The bot provides a persistent ReplyKeyboard with 4 buttons at the bottom of your screen:
+
+#### 🎲 Dice Roll
+- Click the "🎲 Dice" button
+- Receive a random number from 1 to 6
+- Simple single die roll
+
+#### 🎲🎲 Double Dice
+- Click the "🎲🎲 Double Dice" button
+- Roll two dice simultaneously
+- Get individual results plus the sum (range: 2-12)
+- Example: "You rolled: 4 + 5 = **9**"
+
+#### 🌀 Twister
+- Click the "🌀 Twister" button
+- Generate a random Twister game move
+- Returns: limb (Left/Right Hand/Foot) + color (Red/Blue/Green/Yellow)
+- Example: "🔴 Right Hand Red"
+
+#### 🖥️ OVH Servers (Private Feature)
+- Click the "🖥️ OVH Servers" button
+- **Authorization required**: Only available to users in `ALLOWED_USERS` list
+- Shows top 3 cheapest available OVH servers in London datacenter
+- Displays pricing in EUR with server specifications
+- Uses OVH public API for real-time availability
 
 ### Private Functions
 
@@ -239,7 +277,10 @@ Set `ALLOWED_USERS` environment variable with comma-separated user IDs:
 ALLOWED_USERS=123456789,987654321
 ```
 
-Users in this list will see additional commands in `/help` and access private features (to be implemented).
+Users in this list will:
+- See OVH Servers button functionality (unauthorized users get an error message)
+- See additional private features listed in `/help`
+- Access future private commands
 
 ## Testing
 
@@ -294,11 +335,32 @@ Pushes to `main` also trigger:
 - **Instant Delivery**: Telegram pushes updates immediately
 - **Better for Production**: Industry standard for bot deployment
 
+### Why ReplyKeyboard Instead of InlineKeyboard?
+
+- **Persistent Interface**: Buttons stay visible at bottom of screen, no need to scroll up
+- **Better Mobile UX**: ReplyKeyboard is optimized for mobile keyboards (ResizeKeyboard option)
+- **Simplified Routing**: Message-based routing is simpler than CallbackQuery handling
+- **User Convenience**: Users can quickly access all features without sending commands
+
+**Trade-offs:**
+- Buttons take screen space (minimized with ResizeKeyboard)
+- Button text must be synchronized between keyboard definition and router
+- Cannot have buttons with dynamic text (InlineKeyboard supports this)
+
+**Layout:** 2x2 grid for visual balance and mobile-friendliness
+
 ### Why Structured Logging (slog)?
 
 - **Cloud Integration**: Google Cloud Logging parses JSON automatically
 - **Searchable Fields**: Filter logs by user ID, command, error type
 - **Performance**: Efficient structured output format
+
+### Why Separate OVH Package?
+
+- **Separation of Concerns**: API wrapper logic separate from handler logic
+- **Reusability**: OVH client can be used by multiple handlers in the future
+- **Testability**: Pure functions can be tested independently
+- **Go Best Practices**: Follows standard package organization patterns
 
 ### Why One File Per Commit?
 
