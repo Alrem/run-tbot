@@ -17,8 +17,8 @@ import (
 //
 // Functionality:
 //   - Fetches OVH server availability from public API
-//   - Filters by datacenter (London) and subsidiary (GB)
-//   - Returns top 5 cheapest servers with prices
+//   - Filters by datacenter (London) and subsidiary (FR for EUR pricing)
+//   - Returns top 3 cheapest servers with prices in EUR
 //   - Includes FQN (Fully Qualified Name) for each server
 //
 // Parameters:
@@ -58,14 +58,14 @@ func HandleOVHCheck(bot *tgbotapi.BotAPI, message *tgbotapi.Message, cfg *config
 	}
 
 	// Step 3: Fetch OVH data
-	// Parameters: GB (Great Britain), lon (London), top 5 servers
+	// Parameters: FR (France subsidiary for EUR), lon (London), top 3 servers
 	slog.Info("Fetching OVH server availability",
 		"user_id", message.From.ID,
-		"subsidiary", "GB",
+		"subsidiary", "FR",
 		"datacenter", "lon",
-		"top", 5)
+		"top", 3)
 
-	offers, err := ovh.GetTopOffers("GB", "lon", 5)
+	offers, err := ovh.GetTopOffers("FR", "lon", 3)
 	if err != nil {
 		// Log error
 		slog.Error("Failed to fetch OVH offers",
@@ -122,7 +122,7 @@ func formatOVHResults(offers []ovh.Offer) string {
 
 	// Build message
 	message := "🖥️ *Available OVH Servers*\n"
-	message += "_Top 5 cheapest in London \\(GB\\)_\n\n"
+	message += "_Top 3 cheapest in London \\(EUR\\)_\n\n"
 
 	for i, offer := range offers {
 		message += ovh.FormatOfferForTelegram(offer, i+1) + "\n"

@@ -43,18 +43,18 @@ func TestFormatOVHResults(t *testing.T) {
 				{
 					FQN:         "1801sk12.lon.1",
 					PlanCode:    "eco.eco-1",
-					Price:       15.99,
-					Currency:    "GBP",
+					Price:       12.99,
+					Currency:    "EUR",
 					InvoiceName: "ECO 1",
 					Addons:      map[string]string{},
 				},
 			},
 			expectedMust: []string{
 				"Available OVH Servers",
-				"Top 5 cheapest in London",
+				"Top 3 cheapest in London",
 				"1\\.",
-				"15\\.99", // Price period is escaped in MarkdownV2
-				"GBP",
+				"12\\.99", // Price period is escaped in MarkdownV2
+				"EUR",
 				"ECO 1",
 				"1801sk12\\.lon\\.1", // FQN is escaped in MarkdownV2
 				"/start",
@@ -68,37 +68,37 @@ func TestFormatOVHResults(t *testing.T) {
 				{
 					FQN:         "1801sk12.lon.1",
 					PlanCode:    "eco.eco-1",
-					Price:       15.99,
-					Currency:    "GBP",
+					Price:       12.99,
+					Currency:    "EUR",
 					InvoiceName: "ECO 1",
 					Addons:      map[string]string{},
 				},
 				{
 					FQN:         "1801sk13.lon.1",
 					PlanCode:    "eco.eco-2",
-					Price:       25.99,
-					Currency:    "GBP",
+					Price:       19.99,
+					Currency:    "EUR",
 					InvoiceName: "ECO 2",
 					Addons:      map[string]string{},
 				},
 				{
 					FQN:         "1801sk14.lon.1",
 					PlanCode:    "eco.eco-3",
-					Price:       35.99,
-					Currency:    "GBP",
+					Price:       29.99,
+					Currency:    "EUR",
 					InvoiceName: "ECO 3",
 					Addons:      map[string]string{},
 				},
 			},
 			expectedMust: []string{
 				"Available OVH Servers",
-				"Top 5 cheapest in London",
+				"Top 3 cheapest in London",
 				"1\\.",
 				"2\\.",
 				"3\\.",
-				"15\\.99", // Price period is escaped in MarkdownV2
-				"25\\.99", // Price period is escaped in MarkdownV2
-				"35\\.99", // Price period is escaped in MarkdownV2
+				"12\\.99", // Price period is escaped in MarkdownV2
+				"19\\.99", // Price period is escaped in MarkdownV2
+				"29\\.99", // Price period is escaped in MarkdownV2
 				"ECO 1",
 				"ECO 2",
 				"ECO 3",
