@@ -36,15 +36,25 @@ The bot uses **webhook mode** instead of polling for cost efficiency on Cloud Ru
 ┌─────────────────────────────────────┐
 │         HTTP Server (main.go)       │  ← Entry point, webhook endpoint
 ├─────────────────────────────────────┤
-│      Router (handlers/router.go)    │  ← Routes updates to handlers
+│      Router (handlers/router.go)    │  ← Routes commands & button clicks
 ├─────────────────────────────────────┤
-│     Handlers (handlers/*.go)        │  ← Business logic for commands
+│     Handlers (handlers/*.go)        │  ← Business logic (dice, help, etc)
 ├─────────────────────────────────────┤
-│       Bot Layer (bot/bot.go)        │  ← Telegram API wrapper
+│       Bot Layer (bot/bot.go)        │  ← Telegram API wrapper + keyboard
+├─────────────────────────────────────┤
+│      External APIs (ovh/*.go)       │  ← OVH API client (optional)
 ├─────────────────────────────────────┤
 │    Config Layer (config/config.go)  │  ← Environment configuration
 └─────────────────────────────────────┘
 ```
+
+**Update Flow**:
+1. Telegram → main.go webhook endpoint
+2. Router examines update (command vs button click)
+3. Routes to appropriate handler
+4. Handler may call external APIs (OVH)
+5. Handler sends response via Bot layer
+6. Telegram delivers to user
 
 ---
 
@@ -57,20 +67,29 @@ run-tbot/
 │       ├── ci.yml              # Continuous Integration (tests, lint)
 │       └── deploy.yml          # Continuous Deployment to Cloud Run
 ├── bot/
-│   └── bot.go                  # Bot initialization and keyboard helpers
+│   └── bot.go                  # Bot initialization and ReplyKeyboard helpers
 ├── config/
 │   └── config.go               # Configuration management (env vars)
 ├── handlers/
-│   ├── dice.go                 # Dice roll callback handler
+│   ├── dice.go                 # Dice roll handler
 │   ├── dice_test.go            # Unit tests for dice handler
+│   ├── doubledice.go           # Double dice roll handler
+│   ├── doubledice_test.go      # Unit tests for double dice handler
+│   ├── twister.go              # Twister game move generator handler
+│   ├── twister_test.go         # Unit tests for twister handler
+│   ├── ovhcheck.go             # OVH server availability handler (private)
+│   ├── ovhcheck_test.go        # Unit tests for OVH handler
 │   ├── start.go                # /start command handler
 │   ├── start_test.go           # Unit tests for start handler
 │   ├── help.go                 # /help command handler (with auth)
 │   ├── help_test.go            # Unit tests for help handler
-│   ├── router.go               # Central update routing logic
+│   ├── router.go               # Central routing logic (commands + buttons)
 │   └── integration_test.go     # Integration tests
 ├── logger/
 │   └── logger.go               # Structured logging for Cloud Run
+├── ovh/
+│   ├── client.go               # OVH API client wrapper
+│   └── client_test.go          # Unit tests for OVH client
 ├── docs/
 │   └── DEPLOYMENT.md           # Detailed deployment guide
 ├── .env.example                # Environment variables template
@@ -144,6 +163,116 @@ Commit 4: Extended config/config.go
 - Better for collaboration with international developers
 - Better for AI tools and code analysis
 - Chat can be in Russian, but code remains universal
+
+### 5. ReplyKeyboard vs InlineKeyboard
+
+**Decision**: Use ReplyKeyboard for main bot interface
+
+**Rationale**:
+- **Persistent Interface**: Buttons remain visible at bottom of screen, no need to scroll back to previous messages
+- **Better Mobile UX**: ReplyKeyboard is optimized for mobile keyboards with ResizeKeyboard option
+- **Simplified Routing**: Message-based routing is simpler than CallbackQuery handling (no need for AnswerCallbackQuery)
+- **User Convenience**: Users can quickly access all features without typing commands
+
+**Trade-offs**:
+- Buttons take screen space (minimized with ResizeKeyboard=true)
+- Button text must be synchronized between keyboard definition (bot.go) and router logic
+- Cannot have dynamic button text (InlineKeyboard supports this)
+- All users see the same buttons (OVH authorization check happens in handler)
+
+**Implementation**:
+- 2x2 button layout for visual balance and mobile-friendliness
+- Row 1: `[🎲 Dice] [🎲🎲 Double Dice]`
+- Row 2: `[🌀 Twister] [🖥️ OVH Servers]`
+- OneTimeKeyboard=false (buttons stay persistent)
+
+**Migration from InlineKeyboard**:
+- Changed handler signatures from `CallbackQuery` to `Message`
+- Removed CallbackQuery routing from router.go
+- Added button message routing with exact text matching
+
+### 6. Button Text Routing
+
+**Decision**: Exact text matching for button routing
+
+**Rationale**:
+- Simple and explicit - easy to understand routing logic
+- Easy to debug (button text visible in logs)
+- No callback_data encoding needed
+- Emojis in button text make buttons visually distinctive
+
+**Implementation**:
+```go
+switch buttonText {
+case "🎲 Dice":
+    HandleDice(bot, message)
+case "🎲🎲 Double Dice":
+    HandleDoubleDice(bot, message)
+case "🌀 Twister":
+    HandleTwister(bot, message)
+case "🖥️ OVH Servers":
+    HandleOVHCheck(bot, message, cfg)
+}
+```
+
+**Trade-off**: Button text must be kept in sync between:
+- `bot.GetMainKeyboard()` (keyboard definition)
+- `handlers.routeButtonMessage()` (routing logic)
+
+**Alternative Considered**: Callback data with InlineKeyboard
+- Pros: Dynamic button text, more flexible
+- Cons: More complex routing, requires AnswerCallbackQuery, harder to debug
+
+### 7. OVH Package Organization
+
+**Decision**: Separate `ovh/` package for OVH API wrapper
+
+**Rationale**:
+- **Separation of Concerns**: API integration logic separate from Telegram handler logic
+- **Reusability**: OVH client can be used by multiple handlers or future features
+- **Testability**: Pure functions can be tested independently without Telegram mocks
+- **Go Best Practices**: Follows standard package organization patterns
+
+**Package Structure**:
+- `ovh/client.go`: API types, GetTopOffers(), FormatOfferForTelegram()
+- `ovh/client_test.go`: Unit tests for formatting and helper functions
+- `handlers/ovhcheck.go`: Telegram-specific handler with authorization
+
+**API Configuration**:
+- Subsidiary: `FR` (France) for EUR pricing
+- Datacenter: `lon` (London) for location
+- This combination provides EUR prices for servers in London datacenter
+- Top 3 cheapest servers displayed
+
+**Error Handling**:
+- Network errors → User-friendly message ("Please try again later")
+- Empty results → Clear message ("No available servers found")
+- Full error logging for debugging
+
+### 8. MarkdownV2 Escaping Pattern
+
+**Decision**: Escape formatted output before inserting into MarkdownV2 messages
+
+**Rationale**:
+- Telegram's MarkdownV2 requires escaping many special characters: `. - ( ) [ ] etc.`
+- Prices like "15.99" contain periods that must be escaped as "15\\.99"
+- Number formatting (sprintf) happens before escaping
+
+**Implementation Pattern**:
+```go
+// 1. Format the value
+priceStr := fmt.Sprintf("%.2f", offer.Price)
+
+// 2. Escape for MarkdownV2
+escapedPrice := escapeMarkdownV2(priceStr)
+
+// 3. Insert into message
+message += fmt.Sprintf("*%s %s/mo*", escapedPrice, currency)
+```
+
+**Critical Bug Fixed**: Initially forgot to escape formatted prices, causing Telegram API to reject messages with error: "Character '.' is reserved and must be escaped"
+
+**Lesson Learned**: All user-facing text (including formatted numbers) must be escaped when using MarkdownV2 ParseMode
 
 ---
 
