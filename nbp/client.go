@@ -12,105 +12,106 @@ import (
 
 const apiBase = "https://api.nbp.pl/api"
 
-// Rate represents an exchange rate for a single currency from NBP table.
+// Rate represents an exchange rate for a single currency.
 type Rate struct {
-	Currency string  `json:"currency"` // Polish name, e.g. "dolar amerykanski"
-	Code     string  `json:"code"`     // ISO 4217 code, e.g. "USD"
-	Mid      float64 `json:"mid"`      // Average (sredni) exchange rate to PLN
+	Currency      string  // Polish name, e.g. "dolar amerykanski"
+	Code          string  // ISO 4217 code, e.g. "USD"
+	Mid           float64 // Average (sredni) exchange rate to PLN
+	EffectiveDate string  // Date the rate was published, YYYY-MM-DD
+	TableNo       string  // NBP table number, e.g. "045/A/NBP/2026"
 }
 
-// RateTable represents an NBP exchange rate table (Table A - average rates).
-type RateTable struct {
-	Table         string `json:"table"`         // Always "A" for Table A
-	No            string `json:"no"`            // Table number, e.g. "041/A/NBP/2025"
-	EffectiveDate string `json:"effectiveDate"` // Date in YYYY-MM-DD format
-	Rates         []Rate `json:"rates"`
+// currencyRateResponse is the JSON structure returned by
+// GET /api/exchangerates/rates/A/{code}/?format=json
+type currencyRateResponse struct {
+	Table    string `json:"table"`
+	Currency string `json:"currency"`
+	Code     string `json:"code"`
+	Rates    []struct {
+		No            string  `json:"no"`
+		EffectiveDate string  `json:"effectiveDate"`
+		Mid           float64 `json:"mid"`
+	} `json:"rates"`
 }
 
-// GetLastTableA fetches the last NBP Table A (average exchange rates).
+// GetRate fetches the current NBP Table A average rate for a single currency.
 //
-// Table A is published on every business day and contains average (sredni) rates
-// for ~35 currencies against PLN. The last table corresponds to the last business day.
-//
-// Per Polish tax law (art. 30c PIT, art. 15 CIT), the applicable rate is:
+// Endpoint: GET /api/exchangerates/rates/A/{code}/?format=json
+// Returns the most recently published rate, which corresponds to the last
+// business day - satisfying the Polish tax law requirement:
 // "kurs sredni NBP z ostatniego dnia roboczego poprzedzajacego dzien
 // uzyskania przychodu, poniesienia kosztu, wydatku lub zaplaty podatku"
-// (NBP average rate from the last business day preceding income/expense date)
+//
+// Parameters:
+//   - code: ISO 4217 currency code, e.g. "USD", "EUR"
 //
 // Returns:
-//   - *RateTable: Table with rates and effective date
+//   - Rate: Exchange rate with date and table number
 //   - error: Any errors during fetch or parse
-func GetLastTableA() (*RateTable, error) {
-	// /exchangerates/tables/a/last/1/ returns the most recent Table A
-	url := apiBase + "/exchangerates/tables/a/last/1/?format=json"
+func GetRate(code string) (Rate, error) {
+	url := fmt.Sprintf("%s/exchangerates/rates/A/%s/?format=json", apiBase, code)
 
 	body, err := httpGet(url)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch NBP table: %w", err)
+		return Rate{}, fmt.Errorf("failed to fetch NBP rate for %s: %w", code, err)
 	}
 
-	// API returns an array of tables (we request last 1)
-	var tables []RateTable
-	if err := json.Unmarshal(body, &tables); err != nil {
-		return nil, fmt.Errorf("failed to parse NBP response: %w", err)
+	var resp currencyRateResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return Rate{}, fmt.Errorf("failed to parse NBP response for %s: %w", code, err)
 	}
 
-	if len(tables) == 0 {
-		return nil, fmt.Errorf("NBP API returned empty table list")
+	if len(resp.Rates) == 0 {
+		return Rate{}, fmt.Errorf("NBP API returned no rates for %s", code)
 	}
 
-	return &tables[0], nil
+	r := resp.Rates[0]
+	return Rate{
+		Currency:      resp.Currency,
+		Code:          resp.Code,
+		Mid:           r.Mid,
+		EffectiveDate: r.EffectiveDate,
+		TableNo:       r.No,
+	}, nil
 }
 
-// GetRatesForDate fetches NBP Table A rates for a specific date.
+// GetRateForDate fetches the NBP Table A average rate for a specific date.
 //
-// The date should be in YYYY-MM-DD format. NBP API returns the table
-// published on that date. If no table was published (e.g. weekend/holiday),
-// the API returns 404 - in that case, GetLastTableA should be used instead.
+// Endpoint: GET /api/exchangerates/rates/A/{code}/{date}/?format=json
+// If no table was published on that date (weekend/holiday), the API returns 404.
 //
 // Parameters:
+//   - code: ISO 4217 currency code, e.g. "USD"
 //   - date: Date in YYYY-MM-DD format
 //
 // Returns:
-//   - *RateTable: Table with rates for that date
+//   - Rate: Exchange rate for that date
 //   - error: Any errors, including 404 if no table on that date
-func GetRatesForDate(date string) (*RateTable, error) {
-	url := fmt.Sprintf("%s/exchangerates/tables/a/%s/?format=json", apiBase, date)
+func GetRateForDate(code, date string) (Rate, error) {
+	url := fmt.Sprintf("%s/exchangerates/rates/A/%s/%s/?format=json", apiBase, code, date)
 
 	body, err := httpGet(url)
 	if err != nil {
-		return nil, fmt.Errorf("no NBP table for date %s (may be weekend/holiday): %w", date, err)
+		return Rate{}, fmt.Errorf("no NBP rate for %s on %s (may be weekend/holiday): %w", code, date, err)
 	}
 
-	var tables []RateTable
-	if err := json.Unmarshal(body, &tables); err != nil {
-		return nil, fmt.Errorf("failed to parse NBP response: %w", err)
+	var resp currencyRateResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return Rate{}, fmt.Errorf("failed to parse NBP response: %w", err)
 	}
 
-	if len(tables) == 0 {
-		return nil, fmt.Errorf("NBP API returned empty table list for date %s", date)
+	if len(resp.Rates) == 0 {
+		return Rate{}, fmt.Errorf("NBP API returned no rates for %s on %s", code, date)
 	}
 
-	return &tables[0], nil
-}
-
-// FindRate returns the rate for a given currency code from the table.
-// Returns false if the currency is not found in the table.
-//
-// Parameters:
-//   - table: RateTable to search in
-//   - code: ISO 4217 currency code, e.g. "USD"
-//
-// Returns:
-//   - Rate: The rate entry
-//   - bool: True if found
-func FindRate(table *RateTable, code string) (Rate, bool) {
-	for _, r := range table.Rates {
-		if r.Code == code {
-			return r, true
-		}
-	}
-	return Rate{}, false
+	r := resp.Rates[0]
+	return Rate{
+		Currency:      resp.Currency,
+		Code:          resp.Code,
+		Mid:           r.Mid,
+		EffectiveDate: r.EffectiveDate,
+		TableNo:       r.No,
+	}, nil
 }
 
 // httpGet performs an HTTP GET request to the NBP API with a 10-second timeout.

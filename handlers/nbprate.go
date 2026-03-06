@@ -22,8 +22,8 @@ var defaultCurrencies = []string{"EUR", "USD", "GBP", "CHF"}
 // "kurs sredni NBP z ostatniego dnia roboczego poprzedzajacego dzien
 // uzyskania przychodu, poniesienia kosztu, wydatku lub zaplaty podatku"
 //
-// NBP publishes Table A on every business day - fetching the last table
-// automatically gives the most recent published rate (last business day).
+// Each currency is fetched via GET /api/exchangerates/rates/A/{code}/
+// which returns the most recently published rate (last business day).
 //
 // Parameters:
 //   - bot: Telegram Bot API instance for sending messages
@@ -34,14 +34,22 @@ func HandleNBPRate(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
 		"username", message.From.UserName,
 		"chat_id", message.Chat.ID)
 
-	// Fetch last Table A from NBP API
-	table, err := nbp.GetLastTableA()
-	if err != nil {
-		slog.Error("Failed to fetch NBP rates",
-			"error", err,
-			"user_id", message.From.ID,
-			"chat_id", message.Chat.ID)
+	// Fetch each currency individually
+	var rates []nbp.Rate
+	for _, code := range defaultCurrencies {
+		rate, err := nbp.GetRate(code)
+		if err != nil {
+			slog.Error("Failed to fetch NBP rate",
+				"error", err,
+				"code", code,
+				"user_id", message.From.ID,
+				"chat_id", message.Chat.ID)
+			continue
+		}
+		rates = append(rates, rate)
+	}
 
+	if len(rates) == 0 {
 		errMsg := tgbotapi.NewMessage(message.Chat.ID,
 			"❌ Failed to fetch NBP exchange rates\\. Please try again later\\.")
 		errMsg.ParseMode = "MarkdownV2"
@@ -53,8 +61,7 @@ func HandleNBPRate(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
 		return
 	}
 
-	// Format and send the result
-	text := formatNBPRates(table)
+	text := formatNBPRates(rates)
 
 	msg := tgbotapi.NewMessage(message.Chat.ID, text)
 	msg.ParseMode = "MarkdownV2"
@@ -69,45 +76,46 @@ func HandleNBPRate(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
 	slog.Info("NBP rates sent successfully",
 		"user_id", message.From.ID,
 		"chat_id", message.Chat.ID,
-		"effective_date", table.EffectiveDate)
+		"count", len(rates))
 }
 
-// formatNBPRates formats an NBP RateTable into a MarkdownV2 Telegram message.
+// formatNBPRates formats a list of NBP rates into a MarkdownV2 Telegram message.
 //
 // Displays:
-//   - Table number and effective date (last business day)
-//   - Rates for defaultCurrencies to PLN
+//   - Effective date from the first rate (all Table A rates share the same date)
+//   - Rates for each currency to PLN
 //   - Legal note about applicability for tax/income purposes
 //
 // Parameters:
-//   - table: NBP RateTable with rates and metadata
+//   - rates: List of NBP Rate values
 //
 // Returns:
 //   - string: Formatted MarkdownV2 message
-func formatNBPRates(table *nbp.RateTable) string {
+func formatNBPRates(rates []nbp.Rate) string {
 	var b strings.Builder
 
-	// Header with table info and effective date
+	// Header with effective date (use first rate's date)
+	effectiveDate := ""
+	tableNo := ""
+	if len(rates) > 0 {
+		effectiveDate = rates[0].EffectiveDate
+		tableNo = rates[0].TableNo
+	}
+
 	b.WriteString("💱 *NBP Average Exchange Rates \\(Table A\\)*\n")
 	b.WriteString(fmt.Sprintf("_Table %s, effective: %s_\n\n",
-		escapeMarkdownV2NBP(table.No),
-		escapeMarkdownV2NBP(table.EffectiveDate)))
+		escapeMarkdownV2NBP(tableNo),
+		escapeMarkdownV2NBP(effectiveDate)))
 
-	// Rates for default currencies
-	for _, code := range defaultCurrencies {
-		rate, ok := nbp.FindRate(table, code)
-		if !ok {
-			continue
-		}
-
-		// Format: EUR: 4.2345 PLN
+	// One line per currency: EUR: 4.2345 PLN
+	for _, rate := range rates {
 		midStr := fmt.Sprintf("%.4f", rate.Mid)
 		b.WriteString(fmt.Sprintf("*%s*: %s PLN\n",
-			escapeMarkdownV2NBP(code),
+			escapeMarkdownV2NBP(rate.Code),
 			escapeMarkdownV2NBP(midStr)))
 	}
 
-	// Legal note about applicability
+	// Legal note
 	b.WriteString("\n")
 	b.WriteString("_Kurs sredni NBP z ostatniego dnia roboczego_\n")
 	b.WriteString("_poprzedzajacego dzien uzyskania przychodu,_\n")
