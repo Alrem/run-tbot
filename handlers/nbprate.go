@@ -12,7 +12,7 @@ import (
 )
 
 // nbpCurrencies lists the currencies available for selection in step 4.
-var nbpCurrencies = []string{"EUR", "USD", "GBP", "CHF"}
+var nbpCurrencies = []string{"EUR", "USD", "GBP", "CHF", "UAH"}
 
 var monthNames = [13]string{
 	"", // 1-based index
