@@ -7,8 +7,7 @@ type convStep int
 
 const (
 	convStepNone      convStep = iota
-	convStepNBPDate            // waiting for the income/expense date input
-	convStepNBPAmount          // waiting for the amount input (date already stored)
+	convStepNBPAmount          // waiting for the amount input (date collected via inline keyboard)
 )
 
 // convState holds the in-progress state for a single chat's conversation.
@@ -18,7 +17,7 @@ const (
 // acceptable for a stateless Cloud Run deployment — users simply start over.
 type convState struct {
 	Step convStep
-	Date string // set after convStepNBPDate is completed
+	Date string // set after date is selected via inline keyboard
 }
 
 var (
