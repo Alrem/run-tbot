@@ -189,6 +189,10 @@ func routeButtonMessage(bot *tgbotapi.BotAPI, message *tgbotapi.Message, cfg *co
 		// OVH server availability check (private)
 		HandleOVHCheck(bot, message, cfg)
 
+	case "💱 Kurs NBP":
+		// NBP average exchange rates to PLN (public)
+		HandleNBPRate(bot, message)
+
 	default:
 		// Unknown button or regular text message
 		// Log but don't send error (could be user typing normally)
