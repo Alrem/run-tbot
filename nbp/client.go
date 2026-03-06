@@ -114,6 +114,40 @@ func GetRateForDate(code, date string) (Rate, error) {
 	}, nil
 }
 
+// GetRateForPreviousBizDay fetches the NBP Table A rate for the last business day
+// strictly before the given date. This is the rate applicable under Polish tax law:
+// "kurs sredni NBP z ostatniego dnia roboczego poprzedzajacego dzien uzyskania przychodu"
+//
+// The function walks backwards from (date - 1 day), skipping days with no published
+// table (weekends, public holidays), trying up to 10 days.
+//
+// Parameters:
+//   - code: ISO 4217 currency code, e.g. "EUR"
+//   - date: Income/expense date in YYYY-MM-DD format
+//
+// Returns:
+//   - Rate: Exchange rate from the previous business day
+//   - error: If date is invalid or no table found within 10 days
+func GetRateForPreviousBizDay(code, date string) (Rate, error) {
+	t, err := time.Parse("2006-01-02", date)
+	if err != nil {
+		return Rate{}, fmt.Errorf("invalid date format %q, expected YYYY-MM-DD: %w", date, err)
+	}
+
+	// Start from the day before the given date and walk backwards
+	t = t.AddDate(0, 0, -1)
+	for i := 0; i < 10; i++ {
+		dateStr := t.Format("2006-01-02")
+		rate, err := GetRateForDate(code, dateStr)
+		if err == nil {
+			return rate, nil
+		}
+		t = t.AddDate(0, 0, -1)
+	}
+
+	return Rate{}, fmt.Errorf("no NBP rate found in 10 days before %s", date)
+}
+
 // httpGet performs an HTTP GET request to the NBP API with a 10-second timeout.
 //
 // Parameters:
