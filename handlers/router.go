@@ -92,8 +92,8 @@ func routeCallbackQuery(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery) 
 		"user_id", callback.From.ID,
 		"chat_id", callback.Message.Chat.ID)
 
-	if strings.HasPrefix(callback.Data, "nbp:") {
-		HandleNBPCurrencyCallback(bot, callback)
+	if strings.HasPrefix(callback.Data, "nbp") {
+		HandleNBPCallback(bot, callback)
 		return
 	}
 
