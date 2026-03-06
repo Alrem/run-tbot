@@ -7,8 +7,8 @@ type convStep int
 
 const (
 	convStepNone      convStep = iota
-	convStepNBPDate           // waiting for the income/expense date input
-	convStepNBPAmount         // waiting for the amount input (date already stored)
+	convStepNBPDate            // waiting for the income/expense date input
+	convStepNBPAmount          // waiting for the amount input (date already stored)
 )
 
 // convState holds the in-progress state for a single chat's conversation.
