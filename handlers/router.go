@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"log/slog"
+	"strings"
 
 	"github.com/Alrem/run-tbot/config"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -54,7 +55,14 @@ func RouteUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update, cfg *config.Confi
 		return
 	}
 
-	// Route 2: Handle edited messages (optional)
+	// Route 2: Handle inline keyboard button clicks (CallbackQuery)
+	// Used by the NBP multi-step flow for currency selection
+	if update.CallbackQuery != nil {
+		routeCallbackQuery(bot, update.CallbackQuery)
+		return
+	}
+
+	// Route 3: Handle edited messages (optional)
 	// update.EditedMessage is non-nil when user edits their message
 	// For most bots, edited messages can be ignored or treated same as new messages
 	// We log and ignore them for now
@@ -72,6 +80,24 @@ func RouteUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update, cfg *config.Confi
 	// Log for debugging but don't crash
 	slog.Warn("Received unhandled update type",
 		"update_id", update.UpdateID)
+}
+
+// routeCallbackQuery routes CallbackQuery updates (inline keyboard button clicks).
+//
+// Currently handles:
+//   - "nbp:..." prefix: NBP currency conversion callback
+func routeCallbackQuery(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery) {
+	slog.Info("Routing callback query",
+		"data", callback.Data,
+		"user_id", callback.From.ID,
+		"chat_id", callback.Message.Chat.ID)
+
+	if strings.HasPrefix(callback.Data, "nbp:") {
+		HandleNBPCurrencyCallback(bot, callback)
+		return
+	}
+
+	slog.Warn("Unhandled callback query", "data", callback.Data)
 }
 
 // routeMessage routes Message updates to appropriate handlers.
@@ -93,6 +119,14 @@ func RouteUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update, cfg *config.Confi
 //   - message: Message from Telegram
 //   - cfg: Application configuration
 func routeMessage(bot *tgbotapi.BotAPI, message *tgbotapi.Message, cfg *config.Config) {
+	// Route 0: If there is an active multi-step conversation for this chat,
+	// forward the message to the conversation handler regardless of content.
+	// Exception: commands reset the conversation (allow /start to escape a stuck flow).
+	if state := getConvState(message.Chat.ID); state != nil && !message.IsCommand() {
+		HandleNBPConvInput(bot, message, state)
+		return
+	}
+
 	// Route 1: Handle commands (messages starting with /)
 	if message.IsCommand() {
 		// Extract command text
@@ -111,6 +145,8 @@ func routeMessage(bot *tgbotapi.BotAPI, message *tgbotapi.Message, cfg *config.C
 		switch command {
 		case "start":
 			// /start command - welcome message + keyboard
+			// Also resets any in-progress conversation
+			clearConvState(message.Chat.ID)
 			HandleStart(bot, message)
 
 		case "help":
