@@ -11,97 +11,184 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-// nbpCurrencies lists the currencies available for selection in the inline keyboard.
+// nbpCurrencies lists the currencies available for selection in step 4.
 var nbpCurrencies = []string{"EUR", "USD", "GBP", "CHF"}
 
+var monthNames = [13]string{
+	"", // 1-based index
+	"Jan", "Feb", "Mar", "Apr", "May", "Jun",
+	"Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+}
+
 // HandleNBPRate handles the "💱 Kurs NBP" button click.
-// This is step 1 of the multi-step NBP conversion flow.
+// Step 1 of the flow: show the year selection keyboard.
 //
-// Flow:
-//  1. User clicks button → bot asks for date (this function)
-//  2. User types date → HandleNBPConvInput routes to handleNBPAmountStep
-//  3. User types amount → handleNBPAmountStep shows currency keyboard
-//  4. User clicks currency → HandleNBPCurrencyCallback computes result
-//
-// Parameters:
-//   - bot: Telegram Bot API instance
-//   - message: Message from button click
+// Full flow:
+//  1. Button click → year inline keyboard  (this function)
+//  2. Year selected → month inline keyboard (handleNBPYearSelected)
+//  3. Month selected → day inline keyboard  (handleNBPMonthSelected)
+//  4. Day selected → ask for amount         (handleNBPDaySelected)
+//  5. Amount typed → currency keyboard      (HandleNBPConvInput)
+//  6. Currency selected → result            (handleNBPCurrencySelected)
 func HandleNBPRate(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
-	// Start (or restart) the conversation
-	setConvState(message.Chat.ID, &convState{Step: convStepNBPDate})
+	// Clear any previous in-progress conversation
+	clearConvState(message.Chat.ID)
 
 	slog.Info("NBP conversion started",
 		"user_id", message.From.ID,
 		"chat_id", message.Chat.ID)
 
-	today := time.Now().Format("2006-01-02")
-
-	msg := tgbotapi.NewMessage(message.Chat.ID,
-		fmt.Sprintf("📅 Enter the income/expense date \\(YYYY\\-MM\\-DD\\):\n_e\\.g\\. %s_",
-			escapeMarkdownV2NBP(today)))
+	msg := tgbotapi.NewMessage(message.Chat.ID, "📅 Select the income/expense *year*:")
 	msg.ParseMode = "MarkdownV2"
-	// ForceReply prompts the user to reply directly to this message
-	msg.ReplyMarkup = tgbotapi.ForceReply{ForceReply: true, Selective: true}
+	msg.ReplyMarkup = buildYearKeyboard()
 
 	if _, err := bot.Send(msg); err != nil {
-		slog.Error("Failed to send NBP date prompt",
-			"error", err, "chat_id", message.Chat.ID)
-		clearConvState(message.Chat.ID)
+		slog.Error("Failed to send NBP year keyboard", "error", err, "chat_id", message.Chat.ID)
 	}
 }
 
-// HandleNBPConvInput routes text input during an active NBP conversation.
-// Called by the router when a message arrives and there is an active convState.
-//
-// Parameters:
-//   - bot: Telegram Bot API instance
-//   - message: User's text message
-//   - state: Current conversation state
-func HandleNBPConvInput(bot *tgbotapi.BotAPI, message *tgbotapi.Message, state *convState) {
-	switch state.Step {
-	case convStepNBPDate:
-		handleNBPAmountStep(bot, message, state)
-	case convStepNBPAmount:
-		handleNBPCurrencyStep(bot, message, state)
+// HandleNBPCallback is the single entry point for all NBP-related callback queries.
+// Dispatches to the appropriate handler based on callback_data prefix.
+func HandleNBPCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery) {
+	data := callback.Data
+	switch {
+	case strings.HasPrefix(data, "nbp_y:"):
+		handleNBPYearSelected(bot, callback)
+	case strings.HasPrefix(data, "nbp_m:"):
+		handleNBPMonthSelected(bot, callback)
+	case strings.HasPrefix(data, "nbp_d:"):
+		handleNBPDaySelected(bot, callback)
+	case data == "nbp_by":
+		handleNBPBackToYear(bot, callback)
+	case strings.HasPrefix(data, "nbp_bm:"):
+		handleNBPBackToMonth(bot, callback)
+	case data == "nbp_x":
+		handleNBPCancel(bot, callback)
+	case strings.HasPrefix(data, "nbp:"):
+		handleNBPCurrencySelected(bot, callback)
 	default:
-		clearConvState(message.Chat.ID)
+		slog.Warn("Unhandled NBP callback", "data", data)
 	}
 }
 
-// handleNBPAmountStep validates the date input and asks for the amount.
-// This is step 2 of the flow.
-func handleNBPAmountStep(bot *tgbotapi.BotAPI, message *tgbotapi.Message, state *convState) {
-	dateStr := strings.TrimSpace(message.Text)
+// handleNBPYearSelected handles year button click.
+// Edits the message to show month selection for the chosen year.
+// callback.Data format: "nbp_y:{year}"
+func handleNBPYearSelected(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery) {
+	ackCallback(bot, callback)
 
-	// Validate date format
-	if _, err := time.Parse("2006-01-02", dateStr); err != nil {
-		msg := tgbotapi.NewMessage(message.Chat.ID,
-			"❌ Invalid date format\\. Please use *YYYY\\-MM\\-DD*:")
-		msg.ParseMode = "MarkdownV2"
-		msg.ReplyMarkup = tgbotapi.ForceReply{ForceReply: true, Selective: true}
-
-		if _, err := bot.Send(msg); err != nil {
-			slog.Error("Failed to send date validation error", "error", err, "chat_id", message.Chat.ID)
-		}
+	year, err := strconv.Atoi(strings.TrimPrefix(callback.Data, "nbp_y:"))
+	if err != nil {
 		return
 	}
 
-	// Save date and move to next step
-	state.Date = dateStr
-	state.Step = convStepNBPAmount
-	setConvState(message.Chat.ID, state)
+	editText(bot, callback,
+		fmt.Sprintf("📅 Year: *%d* — select month:", year),
+		buildMonthKeyboard(year))
+}
 
-	msg := tgbotapi.NewMessage(message.Chat.ID, "💰 Enter the amount:")
+// handleNBPMonthSelected handles month button click.
+// Edits the message to show day selection for the chosen year+month.
+// callback.Data format: "nbp_m:{year}:{month}"
+func handleNBPMonthSelected(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery) {
+	ackCallback(bot, callback)
+
+	parts := strings.SplitN(strings.TrimPrefix(callback.Data, "nbp_m:"), ":", 2)
+	if len(parts) != 2 {
+		return
+	}
+	year, err1 := strconv.Atoi(parts[0])
+	month, err2 := strconv.Atoi(parts[1])
+	if err1 != nil || err2 != nil || month < 1 || month > 12 {
+		return
+	}
+
+	editText(bot, callback,
+		fmt.Sprintf("📅 %s %d — select day:", monthNames[month], year),
+		buildDayKeyboard(year, month))
+}
+
+// handleNBPDaySelected handles day button click.
+// Stores the selected date in conversation state and asks for the amount.
+// callback.Data format: "nbp_d:{year}:{month}:{day}"
+func handleNBPDaySelected(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery) {
+	ackCallback(bot, callback)
+
+	parts := strings.SplitN(strings.TrimPrefix(callback.Data, "nbp_d:"), ":", 3)
+	if len(parts) != 3 {
+		return
+	}
+	year, err1 := strconv.Atoi(parts[0])
+	month, err2 := strconv.Atoi(parts[1])
+	day, err3 := strconv.Atoi(parts[2])
+	if err1 != nil || err2 != nil || err3 != nil {
+		return
+	}
+
+	date := fmt.Sprintf("%04d-%02d-%02d", year, month, day)
+	chatID := callback.Message.Chat.ID
+
+	// Save date in conversation state; next text message = amount
+	setConvState(chatID, &convState{Step: convStepNBPAmount, Date: date})
+
+	// Update the date picker message to show the confirmed date
+	editTextOnly(bot, callback,
+		fmt.Sprintf("📅 Date selected: *%s*", escapeMarkdownV2NBP(date)))
+
+	// Ask for amount
+	msg := tgbotapi.NewMessage(chatID, "💰 Enter the amount:")
 	msg.ReplyMarkup = tgbotapi.ForceReply{ForceReply: true, Selective: true}
 
 	if _, err := bot.Send(msg); err != nil {
-		slog.Error("Failed to send NBP amount prompt", "error", err, "chat_id", message.Chat.ID)
-		clearConvState(message.Chat.ID)
+		slog.Error("Failed to send NBP amount prompt", "error", err, "chat_id", chatID)
+		clearConvState(chatID)
 	}
 }
 
-// handleNBPCurrencyStep validates the amount input and shows the currency keyboard.
-// This is step 3 of the flow.
+// handleNBPBackToYear handles the "◀ Back" button from month selection.
+// Edits the message back to the year keyboard.
+// callback.Data: "nbp_by"
+func handleNBPBackToYear(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery) {
+	ackCallback(bot, callback)
+	editText(bot, callback, "📅 Select the income/expense *year*:", buildYearKeyboard())
+}
+
+// handleNBPBackToMonth handles the "◀ Back" button from day selection.
+// Edits the message back to the month keyboard for the given year.
+// callback.Data format: "nbp_bm:{year}"
+func handleNBPBackToMonth(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery) {
+	ackCallback(bot, callback)
+
+	year, err := strconv.Atoi(strings.TrimPrefix(callback.Data, "nbp_bm:"))
+	if err != nil {
+		return
+	}
+
+	editText(bot, callback,
+		fmt.Sprintf("📅 Year: *%d* — select month:", year),
+		buildMonthKeyboard(year))
+}
+
+// handleNBPCancel handles the "❌ Cancel" button.
+// Removes the keyboard and clears any active conversation state.
+// callback.Data: "nbp_x"
+func handleNBPCancel(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery) {
+	ackCallback(bot, callback)
+	clearConvState(callback.Message.Chat.ID)
+	editTextOnly(bot, callback, "❌ Cancelled\\.")
+}
+
+// HandleNBPConvInput routes text input during the NBP amount step.
+// Called by the router when a message arrives and there is an active convState.
+func HandleNBPConvInput(bot *tgbotapi.BotAPI, message *tgbotapi.Message, state *convState) {
+	if state.Step == convStepNBPAmount {
+		handleNBPCurrencyStep(bot, message, state)
+		return
+	}
+	clearConvState(message.Chat.ID)
+}
+
+// handleNBPCurrencyStep validates the amount and shows the currency keyboard.
 func handleNBPCurrencyStep(bot *tgbotapi.BotAPI, message *tgbotapi.Message, state *convState) {
 	// Accept both dot and comma as decimal separator
 	amountStr := strings.ReplaceAll(strings.TrimSpace(message.Text), ",", ".")
@@ -119,12 +206,11 @@ func handleNBPCurrencyStep(bot *tgbotapi.BotAPI, message *tgbotapi.Message, stat
 		return
 	}
 
-	// Conversation state no longer needed - currency comes via callback_data
+	// Conversation state no longer needed - date+amount are encoded in callback_data
 	clearConvState(message.Chat.ID)
 
-	// Build inline keyboard with currency buttons.
-	// Date and amount are encoded in callback_data so no server-side state is needed
-	// after this point. Format: "nbp:{date}:{amount}:{currency}"
+	// Build inline keyboard: each button encodes date, amount, and currency
+	// Format: "nbp:{date}:{amount}:{currency}"
 	var buttons []tgbotapi.InlineKeyboardButton
 	for _, code := range nbpCurrencies {
 		callbackData := fmt.Sprintf("nbp:%s:%.2f:%s", state.Date, amount, code)
@@ -135,10 +221,9 @@ func handleNBPCurrencyStep(bot *tgbotapi.BotAPI, message *tgbotapi.Message, stat
 		tgbotapi.NewInlineKeyboardRow(buttons...),
 	)
 
-	amountFormatted := formatAmount(amount)
 	msg := tgbotapi.NewMessage(message.Chat.ID,
 		fmt.Sprintf("💱 Select currency for *%s* \\(date: %s\\):",
-			escapeMarkdownV2NBP(amountFormatted),
+			escapeMarkdownV2NBP(formatAmount(amount)),
 			escapeMarkdownV2NBP(state.Date)))
 	msg.ParseMode = "MarkdownV2"
 	msg.ReplyMarkup = keyboard
@@ -148,21 +233,10 @@ func handleNBPCurrencyStep(bot *tgbotapi.BotAPI, message *tgbotapi.Message, stat
 	}
 }
 
-// HandleNBPCurrencyCallback handles the inline keyboard currency selection.
-// This is step 4 (final step) of the flow.
-//
+// handleNBPCurrencySelected fetches the NBP rate and shows the conversion result.
 // callback.Data format: "nbp:{date}:{amount}:{currency}"
-// Example: "nbp:2026-03-06:1000.00:EUR"
-//
-// Parameters:
-//   - bot: Telegram Bot API instance
-//   - callback: CallbackQuery from inline keyboard button click
-func HandleNBPCurrencyCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery) {
-	// Acknowledge callback immediately to remove loading state on button
-	ack := tgbotapi.NewCallback(callback.ID, "")
-	if _, err := bot.Request(ack); err != nil {
-		slog.Error("Failed to answer callback query", "error", err)
-	}
+func handleNBPCurrencySelected(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery) {
+	ackCallback(bot, callback)
 
 	// Parse callback data: "nbp:{date}:{amount}:{currency}"
 	parts := strings.SplitN(callback.Data, ":", 4)
@@ -178,7 +252,6 @@ func HandleNBPCurrencyCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.Callback
 		return
 	}
 	currency := parts[3]
-
 	chatID := callback.Message.Chat.ID
 
 	slog.Info("NBP currency selected",
@@ -191,35 +264,27 @@ func HandleNBPCurrencyCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.Callback
 	// Fetch NBP rate for the last business day before the given date
 	rate, err := nbp.GetRateForPreviousBizDay(currency, date)
 	if err != nil {
-		slog.Error("Failed to fetch NBP rate for previous biz day",
-			"error", err,
-			"date", date,
-			"currency", currency,
-			"chat_id", chatID)
+		slog.Error("Failed to fetch NBP rate",
+			"error", err, "date", date, "currency", currency, "chat_id", chatID)
 
 		errMsg := tgbotapi.NewMessage(chatID,
-			fmt.Sprintf("❌ No NBP rate found for *%s* before %s\\.\nThe date may be too old or there is a network error\\.",
+			fmt.Sprintf("❌ No NBP rate found for *%s* before %s\\.\n_The date may be too old or there is a network error\\._",
 				currency, escapeMarkdownV2NBP(date)))
 		errMsg.ParseMode = "MarkdownV2"
 		bot.Send(errMsg) //nolint:errcheck
 		return
 	}
 
-	// Compute converted amount
+	// Remove inline keyboard from the currency selection message
+	editTextOnly(bot, callback,
+		fmt.Sprintf("💱 Converting *%s %s* for date %s\\.\\.\\.",
+			escapeMarkdownV2NBP(formatAmount(amount)),
+			currency,
+			escapeMarkdownV2NBP(date)))
+
 	result := amount * rate.Mid
 
-	// Format result message
-	text := formatNBPResult(date, amount, currency, rate, result)
-
-	// Remove inline keyboard from the original message to keep chat clean
-	editMarkup := tgbotapi.NewEditMessageReplyMarkup(
-		chatID,
-		callback.Message.MessageID,
-		tgbotapi.InlineKeyboardMarkup{InlineKeyboard: [][]tgbotapi.InlineKeyboardButton{}},
-	)
-	bot.Request(editMarkup) //nolint:errcheck
-
-	msg := tgbotapi.NewMessage(chatID, text)
+	msg := tgbotapi.NewMessage(chatID, formatNBPResult(date, amount, currency, rate, result))
 	msg.ParseMode = "MarkdownV2"
 
 	if _, err := bot.Send(msg); err != nil {
@@ -227,30 +292,106 @@ func HandleNBPCurrencyCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.Callback
 	}
 }
 
+// --- Keyboard builders ---
+
+// buildYearKeyboard returns an inline keyboard with the current year and 3 previous years.
+func buildYearKeyboard() tgbotapi.InlineKeyboardMarkup {
+	currentYear := time.Now().Year()
+
+	var buttons []tgbotapi.InlineKeyboardButton
+	for i := 0; i < 4; i++ {
+		year := currentYear - i
+		buttons = append(buttons,
+			tgbotapi.NewInlineKeyboardButtonData(
+				strconv.Itoa(year),
+				fmt.Sprintf("nbp_y:%d", year),
+			))
+	}
+
+	return tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(buttons...),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("❌ Cancel", "nbp_x"),
+		),
+	)
+}
+
+// buildMonthKeyboard returns an inline keyboard with all 12 months for the given year.
+func buildMonthKeyboard(year int) tgbotapi.InlineKeyboardMarkup {
+	var rows [][]tgbotapi.InlineKeyboardButton
+
+	// 3 months per row → 4 rows
+	for startMonth := 1; startMonth <= 12; startMonth += 3 {
+		var row []tgbotapi.InlineKeyboardButton
+		for m := startMonth; m < startMonth+3 && m <= 12; m++ {
+			row = append(row, tgbotapi.NewInlineKeyboardButtonData(
+				monthNames[m],
+				fmt.Sprintf("nbp_m:%d:%d", year, m),
+			))
+		}
+		rows = append(rows, row)
+	}
+
+	// Navigation row
+	rows = append(rows, tgbotapi.NewInlineKeyboardRow(
+		tgbotapi.NewInlineKeyboardButtonData("◀ Back", "nbp_by"),
+		tgbotapi.NewInlineKeyboardButtonData("❌ Cancel", "nbp_x"),
+	))
+
+	return tgbotapi.InlineKeyboardMarkup{InlineKeyboard: rows}
+}
+
+// buildDayKeyboard returns an inline keyboard with all days of the given month.
+func buildDayKeyboard(year, month int) tgbotapi.InlineKeyboardMarkup {
+	// time.Date with day=0 of next month gives last day of current month
+	daysInMonth := time.Date(year, time.Month(month+1), 0, 0, 0, 0, 0, time.UTC).Day()
+
+	var rows [][]tgbotapi.InlineKeyboardButton
+	var row []tgbotapi.InlineKeyboardButton
+
+	for day := 1; day <= daysInMonth; day++ {
+		row = append(row, tgbotapi.NewInlineKeyboardButtonData(
+			strconv.Itoa(day),
+			fmt.Sprintf("nbp_d:%d:%d:%d", year, month, day),
+		))
+		// 7 days per row (like a calendar week)
+		if len(row) == 7 || day == daysInMonth {
+			rows = append(rows, row)
+			row = nil
+		}
+	}
+
+	// Navigation row
+	rows = append(rows, tgbotapi.NewInlineKeyboardRow(
+		tgbotapi.NewInlineKeyboardButtonData("◀ Back", fmt.Sprintf("nbp_bm:%d", year)),
+		tgbotapi.NewInlineKeyboardButtonData("❌ Cancel", "nbp_x"),
+	))
+
+	return tgbotapi.InlineKeyboardMarkup{InlineKeyboard: rows}
+}
+
+// --- Formatting helpers ---
+
 // formatNBPResult builds the final MarkdownV2 result message.
 func formatNBPResult(incomeDate string, amount float64, currency string, rate nbp.Rate, result float64) string {
 	var b strings.Builder
 
 	b.WriteString("💱 *NBP Currency Conversion*\n\n")
 
-	// Input
 	b.WriteString(fmt.Sprintf("Amount: *%s %s*\n",
 		escapeMarkdownV2NBP(formatAmount(amount)),
 		escapeMarkdownV2NBP(currency)))
 	b.WriteString(fmt.Sprintf("Income/expense date: *%s*\n\n",
 		escapeMarkdownV2NBP(incomeDate)))
 
-	// Applicable rate
 	b.WriteString(fmt.Sprintf("NBP rate \\(Table %s, %s\\): *%s PLN*\n\n",
 		escapeMarkdownV2NBP(rate.TableNo),
 		escapeMarkdownV2NBP(rate.EffectiveDate),
 		escapeMarkdownV2NBP(fmt.Sprintf("%.4f", rate.Mid))))
 
-	// Result
 	b.WriteString(fmt.Sprintf("*Result: %s PLN*\n\n",
 		escapeMarkdownV2NBP(formatAmount(result))))
 
-	// Legal note
 	b.WriteString("_Kurs sredni NBP z ostatniego dnia roboczego_\n")
 	b.WriteString("_poprzedzajacego dzien uzyskania przychodu\\._")
 
@@ -258,7 +399,6 @@ func formatNBPResult(incomeDate string, amount float64, currency string, rate nb
 }
 
 // formatAmount formats a float with up to 2 decimal places, trimming trailing zeros.
-// Examples: 1000.00 -> "1000", 100.50 -> "100.50", 99.99 -> "99.99"
 func formatAmount(v float64) string {
 	s := fmt.Sprintf("%.2f", v)
 	s = strings.TrimRight(s, "0")
@@ -267,7 +407,6 @@ func formatAmount(v float64) string {
 }
 
 // escapeMarkdownV2NBP escapes special characters for Telegram MarkdownV2.
-// Kept local to avoid importing Telegram packages into the nbp package.
 func escapeMarkdownV2NBP(text string) string {
 	specialChars := []string{
 		"_", "*", "[", "]", "(", ")", "~", "`", ">", "#", "+", "-", "=", "|", "{", "}", ".", "!",
@@ -277,4 +416,40 @@ func escapeMarkdownV2NBP(text string) string {
 		result = strings.ReplaceAll(result, char, "\\"+char)
 	}
 	return result
+}
+
+// --- Telegram API helpers ---
+
+// ackCallback answers a callback query to remove the loading indicator on the button.
+func ackCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery) {
+	if _, err := bot.Request(tgbotapi.NewCallback(callback.ID, "")); err != nil {
+		slog.Error("Failed to answer callback query", "error", err)
+	}
+}
+
+// editText edits a callback message's text and inline keyboard.
+func editText(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, text string, keyboard tgbotapi.InlineKeyboardMarkup) {
+	edit := tgbotapi.NewEditMessageTextAndMarkup(
+		callback.Message.Chat.ID,
+		callback.Message.MessageID,
+		text,
+		keyboard,
+	)
+	edit.ParseMode = "MarkdownV2"
+	if _, err := bot.Request(edit); err != nil {
+		slog.Error("Failed to edit message", "error", err, "chat_id", callback.Message.Chat.ID)
+	}
+}
+
+// editTextOnly edits a callback message's text and removes the inline keyboard.
+func editTextOnly(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, text string) {
+	edit := tgbotapi.NewEditMessageText(
+		callback.Message.Chat.ID,
+		callback.Message.MessageID,
+		text,
+	)
+	edit.ParseMode = "MarkdownV2"
+	if _, err := bot.Request(edit); err != nil {
+		slog.Error("Failed to edit message text", "error", err, "chat_id", callback.Message.Chat.ID)
+	}
 }
