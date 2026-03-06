@@ -277,6 +277,16 @@ func handleNBPAmountInput(bot *tgbotapi.BotAPI, message *tgbotapi.Message, state
 
 	if _, err := bot.Send(msg); err != nil {
 		slog.Error("Failed to send NBP result", "error", err, "chat_id", chatID)
+		return
+	}
+
+	// Return to the start of the flow
+	next := tgbotapi.NewMessage(chatID, "📅 Select the income/expense *year*:")
+	next.ParseMode = "MarkdownV2"
+	next.ReplyMarkup = buildYearKeyboard()
+
+	if _, err := bot.Send(next); err != nil {
+		slog.Error("Failed to send NBP year keyboard after result", "error", err, "chat_id", chatID)
 	}
 }
 
