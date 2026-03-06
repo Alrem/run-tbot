@@ -16,8 +16,9 @@ const (
 // Note: This is an in-memory store. State is lost on bot restart, which is
 // acceptable for a stateless Cloud Run deployment — users simply start over.
 type convState struct {
-	Step convStep
-	Date string // set after date is selected via inline keyboard
+	Step     convStep
+	Date     string // set after date is selected via inline keyboard
+	Currency string // set after currency is selected via inline keyboard
 }
 
 var (

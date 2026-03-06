@@ -58,14 +58,16 @@ func HandleNBPCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery) {
 		handleNBPMonthSelected(bot, callback)
 	case strings.HasPrefix(data, "nbp_d:"):
 		handleNBPDaySelected(bot, callback)
+	case strings.HasPrefix(data, "nbp_c:"):
+		handleNBPCurrencySelected(bot, callback)
 	case data == "nbp_by":
 		handleNBPBackToYear(bot, callback)
 	case strings.HasPrefix(data, "nbp_bm:"):
 		handleNBPBackToMonth(bot, callback)
+	case strings.HasPrefix(data, "nbp_bd:"):
+		handleNBPBackToDay(bot, callback)
 	case data == "nbp_x":
 		handleNBPCancel(bot, callback)
-	case strings.HasPrefix(data, "nbp:"):
-		handleNBPCurrencySelected(bot, callback)
 	default:
 		slog.Warn("Unhandled NBP callback", "data", data)
 	}
@@ -109,7 +111,7 @@ func handleNBPMonthSelected(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQue
 }
 
 // handleNBPDaySelected handles day button click.
-// Stores the selected date in conversation state and asks for the amount.
+// Edits the message to show the currency selection keyboard.
 // callback.Data format: "nbp_d:{year}:{month}:{day}"
 func handleNBPDaySelected(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery) {
 	ackCallback(bot, callback)
@@ -126,16 +128,33 @@ func handleNBPDaySelected(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery
 	}
 
 	date := fmt.Sprintf("%04d-%02d-%02d", year, month, day)
+
+	editText(bot, callback,
+		fmt.Sprintf("💱 Date: *%s* — select currency:", escapeMarkdownV2NBP(date)),
+		buildCurrencyKeyboard(date))
+}
+
+// handleNBPCurrencySelected handles currency button click after day selection.
+// Stores date+currency in conversation state and asks for the amount.
+// callback.Data format: "nbp_c:{date}:{currency}"
+func handleNBPCurrencySelected(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery) {
+	ackCallback(bot, callback)
+
+	parts := strings.SplitN(strings.TrimPrefix(callback.Data, "nbp_c:"), ":", 2)
+	if len(parts) != 2 {
+		return
+	}
+	date := parts[0]
+	currency := parts[1]
 	chatID := callback.Message.Chat.ID
 
-	// Save date in conversation state; next text message = amount
-	setConvState(chatID, &convState{Step: convStepNBPAmount, Date: date})
+	// Save date + currency; next text message = amount
+	setConvState(chatID, &convState{Step: convStepNBPAmount, Date: date, Currency: currency})
 
-	// Update the date picker message to show the confirmed date
 	editTextOnly(bot, callback,
-		fmt.Sprintf("📅 Date selected: *%s*", escapeMarkdownV2NBP(date)))
+		fmt.Sprintf("📅 *%s* · 💱 *%s* — enter amount:",
+			escapeMarkdownV2NBP(date), currency))
 
-	// Ask for amount
 	msg := tgbotapi.NewMessage(chatID, "💰 Enter the amount:")
 	msg.ReplyMarkup = tgbotapi.ForceReply{ForceReply: true, Selective: true}
 
@@ -169,6 +188,26 @@ func handleNBPBackToMonth(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery
 		buildMonthKeyboard(year))
 }
 
+// handleNBPBackToDay handles the "◀ Back" button from currency selection.
+// Edits the message back to the day keyboard for the given date.
+// callback.Data format: "nbp_bd:{date}" where date is YYYY-MM-DD
+func handleNBPBackToDay(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery) {
+	ackCallback(bot, callback)
+
+	date := strings.TrimPrefix(callback.Data, "nbp_bd:")
+	t, err := time.Parse("2006-01-02", date)
+	if err != nil {
+		return
+	}
+
+	year := t.Year()
+	month := int(t.Month())
+
+	editText(bot, callback,
+		fmt.Sprintf("📅 %s %d — select day:", monthNames[month], year),
+		buildDayKeyboard(year, month))
+}
+
 // handleNBPCancel handles the "❌ Cancel" button.
 // Removes the keyboard and clears any active conversation state.
 // callback.Data: "nbp_x"
@@ -182,14 +221,15 @@ func handleNBPCancel(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery) {
 // Called by the router when a message arrives and there is an active convState.
 func HandleNBPConvInput(bot *tgbotapi.BotAPI, message *tgbotapi.Message, state *convState) {
 	if state.Step == convStepNBPAmount {
-		handleNBPCurrencyStep(bot, message, state)
+		handleNBPAmountInput(bot, message, state)
 		return
 	}
 	clearConvState(message.Chat.ID)
 }
 
-// handleNBPCurrencyStep validates the amount and shows the currency keyboard.
-func handleNBPCurrencyStep(bot *tgbotapi.BotAPI, message *tgbotapi.Message, state *convState) {
+// handleNBPAmountInput validates the amount, fetches the NBP rate, and shows the result.
+// At this point state.Date and state.Currency are already set.
+func handleNBPAmountInput(bot *tgbotapi.BotAPI, message *tgbotapi.Message, state *convState) {
 	// Accept both dot and comma as decimal separator
 	amountStr := strings.ReplaceAll(strings.TrimSpace(message.Text), ",", ".")
 
@@ -206,85 +246,33 @@ func handleNBPCurrencyStep(bot *tgbotapi.BotAPI, message *tgbotapi.Message, stat
 		return
 	}
 
-	// Conversation state no longer needed - date+amount are encoded in callback_data
 	clearConvState(message.Chat.ID)
 
-	// Build inline keyboard: each button encodes date, amount, and currency
-	// Format: "nbp:{date}:{amount}:{currency}"
-	var buttons []tgbotapi.InlineKeyboardButton
-	for _, code := range nbpCurrencies {
-		callbackData := fmt.Sprintf("nbp:%s:%.2f:%s", state.Date, amount, code)
-		buttons = append(buttons, tgbotapi.NewInlineKeyboardButtonData(code, callbackData))
-	}
+	chatID := message.Chat.ID
 
-	keyboard := tgbotapi.NewInlineKeyboardMarkup(
-		tgbotapi.NewInlineKeyboardRow(buttons...),
-	)
-
-	msg := tgbotapi.NewMessage(message.Chat.ID,
-		fmt.Sprintf("💱 Select currency for *%s* \\(date: %s\\):",
-			escapeMarkdownV2NBP(formatAmount(amount)),
-			escapeMarkdownV2NBP(state.Date)))
-	msg.ParseMode = "MarkdownV2"
-	msg.ReplyMarkup = keyboard
-
-	if _, err := bot.Send(msg); err != nil {
-		slog.Error("Failed to send NBP currency keyboard", "error", err, "chat_id", message.Chat.ID)
-	}
-}
-
-// handleNBPCurrencySelected fetches the NBP rate and shows the conversion result.
-// callback.Data format: "nbp:{date}:{amount}:{currency}"
-func handleNBPCurrencySelected(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery) {
-	ackCallback(bot, callback)
-
-	// Parse callback data: "nbp:{date}:{amount}:{currency}"
-	parts := strings.SplitN(callback.Data, ":", 4)
-	if len(parts) != 4 {
-		slog.Error("Invalid NBP callback data", "data", callback.Data)
-		return
-	}
-
-	date := parts[1]
-	amount, err := strconv.ParseFloat(parts[2], 64)
-	if err != nil {
-		slog.Error("Invalid amount in NBP callback data", "data", callback.Data)
-		return
-	}
-	currency := parts[3]
-	chatID := callback.Message.Chat.ID
-
-	slog.Info("NBP currency selected",
-		"user_id", callback.From.ID,
+	slog.Info("NBP amount received, fetching rate",
+		"user_id", message.From.ID,
 		"chat_id", chatID,
-		"date", date,
-		"amount", amount,
-		"currency", currency)
+		"date", state.Date,
+		"currency", state.Currency,
+		"amount", amount)
 
-	// Fetch NBP rate for the last business day before the given date
-	rate, err := nbp.GetRateForPreviousBizDay(currency, date)
+	rate, err := nbp.GetRateForPreviousBizDay(state.Currency, state.Date)
 	if err != nil {
 		slog.Error("Failed to fetch NBP rate",
-			"error", err, "date", date, "currency", currency, "chat_id", chatID)
+			"error", err, "date", state.Date, "currency", state.Currency, "chat_id", chatID)
 
 		errMsg := tgbotapi.NewMessage(chatID,
 			fmt.Sprintf("❌ No NBP rate found for *%s* before %s\\.\n_The date may be too old or there is a network error\\._",
-				currency, escapeMarkdownV2NBP(date)))
+				state.Currency, escapeMarkdownV2NBP(state.Date)))
 		errMsg.ParseMode = "MarkdownV2"
 		bot.Send(errMsg) //nolint:errcheck
 		return
 	}
 
-	// Remove inline keyboard from the currency selection message
-	editTextOnly(bot, callback,
-		fmt.Sprintf("💱 Converting *%s %s* for date %s\\.\\.\\.",
-			escapeMarkdownV2NBP(formatAmount(amount)),
-			currency,
-			escapeMarkdownV2NBP(date)))
-
 	result := amount * rate.Mid
 
-	msg := tgbotapi.NewMessage(chatID, formatNBPResult(date, amount, currency, rate, result))
+	msg := tgbotapi.NewMessage(chatID, formatNBPResult(state.Date, amount, state.Currency, rate, result))
 	msg.ParseMode = "MarkdownV2"
 
 	if _, err := bot.Send(msg); err != nil {
@@ -293,6 +281,27 @@ func handleNBPCurrencySelected(bot *tgbotapi.BotAPI, callback *tgbotapi.Callback
 }
 
 // --- Keyboard builders ---
+
+// buildCurrencyKeyboard returns an inline keyboard with all available currencies.
+// Each button encodes the date so no server-side state is needed after this step.
+// callback.Data format: "nbp_c:{date}:{currency}"
+func buildCurrencyKeyboard(date string) tgbotapi.InlineKeyboardMarkup {
+	var buttons []tgbotapi.InlineKeyboardButton
+	for _, code := range nbpCurrencies {
+		buttons = append(buttons, tgbotapi.NewInlineKeyboardButtonData(
+			code,
+			fmt.Sprintf("nbp_c:%s:%s", date, code),
+		))
+	}
+
+	return tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(buttons...),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("◀ Back", fmt.Sprintf("nbp_bd:%s", date)),
+			tgbotapi.NewInlineKeyboardButtonData("❌ Cancel", "nbp_x"),
+		),
+	)
+}
 
 // buildYearKeyboard returns an inline keyboard with the current year and 3 previous years.
 func buildYearKeyboard() tgbotapi.InlineKeyboardMarkup {
