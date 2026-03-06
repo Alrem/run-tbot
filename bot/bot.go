@@ -40,10 +40,11 @@ func NewBot(token string, debug bool) (*tgbotapi.BotAPI, error) {
 //   - 🎲🎲 Double Dice - Roll two dice (2-12)
 //   - 🌀 Twister - Random Twister game move
 //   - 🖥️ OVH Servers - Check OVH server availability (private)
+//   - 💱 Kurs NBP - NBP average exchange rates to PLN (public)
 //
-// Returns ReplyKeyboardMarkup with 2x2 button layout
+// Returns ReplyKeyboardMarkup with 3-row button layout
 func GetMainKeyboard() tgbotapi.ReplyKeyboardMarkup {
-	// Create keyboard with 2 rows of 2 buttons each
+	// Create keyboard with 3 rows
 	keyboard := tgbotapi.NewReplyKeyboard(
 		// Row 1: Dice features
 		tgbotapi.NewKeyboardButtonRow(
@@ -54,6 +55,10 @@ func GetMainKeyboard() tgbotapi.ReplyKeyboardMarkup {
 		tgbotapi.NewKeyboardButtonRow(
 			tgbotapi.NewKeyboardButton("🌀 Twister"),
 			tgbotapi.NewKeyboardButton("🖥️ OVH Servers"),
+		),
+		// Row 3: Finance features
+		tgbotapi.NewKeyboardButtonRow(
+			tgbotapi.NewKeyboardButton("💱 Kurs NBP"),
 		),
 	)
 
