@@ -130,8 +130,10 @@ func httpGet(url string) ([]byte, error) {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	// NBP API requires Accept header for JSON responses
 	req.Header.Set("Accept", "application/json")
+	// NBP API blocks default Go HTTP client user-agent (returns 403).
+	// Setting a browser-like User-Agent resolves this.
+	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; run-tbot/1.0)")
 
 	resp, err := client.Do(req)
 	if err != nil {
