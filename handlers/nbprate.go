@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	botpkg "github.com/Alrem/run-tbot/bot"
 	"github.com/Alrem/run-tbot/nbp"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
@@ -215,6 +216,13 @@ func handleNBPCancel(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery) {
 	ackCallback(bot, callback)
 	clearConvState(callback.Message.Chat.ID)
 	editTextOnly(bot, callback, "❌ Cancelled\\.")
+
+	// Return to main menu
+	msg := tgbotapi.NewMessage(callback.Message.Chat.ID, "Main menu:")
+	msg.ReplyMarkup = botpkg.GetMainKeyboard()
+	if _, err := bot.Send(msg); err != nil {
+		slog.Error("Failed to send main menu after cancel", "error", err, "chat_id", callback.Message.Chat.ID)
+	}
 }
 
 // HandleNBPConvInput routes text input during the NBP amount step.
